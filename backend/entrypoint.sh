@@ -1,4 +1,4 @@
-#!/bin/sh
+﻿#!/bin/sh
 # entrypoint.sh — Backend container startup script
 #
 # Responsibilities:

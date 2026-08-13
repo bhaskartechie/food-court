@@ -1,10 +1,12 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import PropTypes from 'prop-types';
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
   useNavigate,
+  useLocation,
   Link,
 } from 'react-router-dom';
 import {
@@ -31,7 +33,15 @@ import {
 } from '@mui/material';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import StoreIcon from '@mui/icons-material/Store';
-import { authAPI, sellersAPI } from './services/api';
+import { authAPI, sellersAPI, getErrorMessage } from './services/api';
+import MenuPage from './pages/Menu';
+import OrdersPage from './pages/Orders';
+import ProfilePage from './pages/Profile';
+import SellerDashboardPage from './pages/SellerDashboard';
+import BuyerDashboardPage from './pages/BuyerDashboard';
+import Footer from './components/Footer';
+import './App.css';
+import LandingPage from './pages/Landing';
 
 // ── MUI Dark Theme ──────────────────────────────────────────────────────────
 const theme = createTheme({
@@ -91,6 +101,10 @@ function AuthProvider({ children }) {
   );
 }
 
+AuthProvider.propTypes = {
+  children: PropTypes.node,
+};
+
 const useAuth = () => useContext(AuthContext);
 
 // ── Navigation Bar ───────────────────────────────────────────────────────────
@@ -113,6 +127,15 @@ function Navbar() {
         </Typography>
         {user ? (
           <>
+            <Button component={Link} to="/buyer" color="inherit" size="small" sx={{ mr: 1 }}>
+              Dashboard
+            </Button>
+            <Button component={Link} to="/orders" color="inherit" size="small" sx={{ mr: 1 }}>
+              Orders
+            </Button>
+            <Button component={Link} to="/profile" color="inherit" size="small" sx={{ mr: 1 }}>
+              Profile
+            </Button>
             <Chip
               label={`${user.email || 'User'} · ${user.role || 'buyer'}`}
               size="small"
@@ -136,11 +159,13 @@ function Navbar() {
 function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
 
   const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [role, setRole] = useState('buyer');
+  const [role, setRole] = useState(params.get('role') || 'buyer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -160,7 +185,7 @@ function LoginPage() {
       );
       setStep('otp');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to send OTP. Please try again.');
+      setError(getErrorMessage(err, 'Failed to send OTP. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -174,9 +199,12 @@ function LoginPage() {
       const res = await authAPI.login(email, otp);
       const { access_token, user: userData } = res.data;
       login(userData || { email, role }, access_token);
-      navigate('/');
+      const next = params.get('next') || '/';
+      // Sanitize `next` to avoid open-redirects: allow only relative paths
+      const safeNext = next && next.startsWith('/') ? next : '/';
+      navigate(safeNext);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid OTP. Please try again.');
+      setError(getErrorMessage(err, 'Invalid OTP. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -277,6 +305,16 @@ function SellersPage() {
   const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { user } = useAuth();
+  // Fallback: some flows may not have context hydrated yet — read localStorage
+  const currentUser = user || (() => {
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  })();
 
   useEffect(() => {
     sellersAPI.list()
@@ -315,9 +353,15 @@ function SellersPage() {
           <Typography color="text.secondary" sx={{ mb: 3 }}>
             Be the first to register as a seller in your society!
           </Typography>
-          <Button variant="contained" component={Link} to="/login">
-            Register as Seller
-          </Button>
+          {currentUser && currentUser.role === 'seller' ? (
+            <Button variant="contained" component={Link} to="/seller/dashboard">
+              Your Seller Dashboard
+            </Button>
+          ) : (
+            <Button variant="contained" component={Link} to={`/login?role=seller&next=/seller/dashboard`}>
+              Register as Seller
+            </Button>
+          )}
         </Paper>
       )}
 
@@ -419,8 +463,13 @@ function HomePage() {
 // ── Route Guard ───────────────────────────────────────────────────────────────
 function PrivateRoute({ children }) {
   const { user } = useAuth();
-  return user ? children : <Navigate to="/login" replace />;
+  const location = useLocation();
+  return user ? children : <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
 }
+
+PrivateRoute.propTypes = {
+  children: PropTypes.node,
+};
 
 // ── App Root ──────────────────────────────────────────────────────────────────
 function App() {
@@ -441,8 +490,17 @@ function App() {
                 </PrivateRoute>
               }
             />
+            <Route path="/menu/:sellerId" element={<MenuPage />} />
+            <Route path="/landing" element={<LandingPage />} />
+            <Route path="/orders" element={<PrivateRoute><OrdersPage /></PrivateRoute>} />
+            <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+            <Route path="/buyer" element={<PrivateRoute><BuyerDashboardPage /></PrivateRoute>} />
+            <Route path="/seller/dashboard" element={<PrivateRoute><SellerDashboardPage /></PrivateRoute>} />
+            <Route path="/seller/dashboard/menus" element={<PrivateRoute><MenuPage /></PrivateRoute>} />
+            <Route path="/seller/dashboard/orders" element={<PrivateRoute><OrdersPage /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <Footer />
         </Router>
       </AuthProvider>
     </ThemeProvider>

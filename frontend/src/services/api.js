@@ -19,6 +19,12 @@ const api = axios.create({
   },
 });
 
+export const getErrorMessage = (error, fallback = 'Something went wrong.') => {
+  if (!error) return fallback;
+  const detail = error.response?.data?.detail || error.response?.data?.message;
+  return detail || error.message || fallback;
+};
+
 // ── Request interceptor — attach JWT token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
@@ -122,3 +128,12 @@ export const ratingsAPI = {
 };
 
 export default api;
+
+// ── AI / Multimodal ──────────────────────────────────────────────────────────
+export const aiAPI = {
+  /** Multimodal search: accepts text and optional file (image/audio/video) */
+  multimodalSearch: (data) =>
+    api.post('/ai/search', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};

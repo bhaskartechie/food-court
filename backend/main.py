@@ -8,7 +8,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
-from api.routes import auth, sellers, menus, orders, ratings, admin
+from api.routes import auth, sellers, menus, orders, ratings, admin, ai
 
 # Create FastAPI app
 app = FastAPI(
@@ -60,6 +60,7 @@ app.include_router(menus.router)
 app.include_router(orders.router)
 app.include_router(ratings.router)
 app.include_router(admin.router)
+app.include_router(ai.router)
 
 
 # Global exception handler

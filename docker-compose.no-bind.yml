@@ -1,11 +1,7 @@
-# Development docker-compose
-# Usage: docker-compose up --build -d
-
 services:
-  # ── PostgreSQL Database ────────────────────────────────────────────────────
   postgres:
     image: postgres:14-alpine
-    container_name: society-food-postgres
+    container_name: society-food-postgres-nobind
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -24,10 +20,9 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # ── Redis Cache ────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: society-food-redis
+    container_name: society-food-redis-nobind
     ports:
       - "6379:6379"
     volumes:
@@ -41,43 +36,32 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # ── FastAPI Backend ────────────────────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: society-food-backend
+    container_name: society-food-backend-nobind
     environment:
-      # Database — points to postgres service by service name
       DATABASE_URL: postgresql://postgres:password@postgres:5432/society_food
-      # Redis — points to redis service by service name
       REDIS_URL: redis://redis:6379/0
-      # Security
       SECRET_KEY: dev-secret-key-change-in-production-256bits
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
-      # Environment
       ENVIRONMENT: development
       LOG_LEVEL: INFO
-      # CORS — allow the frontend origin
       CORS_ORIGINS: "http://localhost:3000,http://localhost"
-      # Feature flags
-      ENABLE_OTP_EMAIL: "false"     # Disable real email in dev
+      ENABLE_OTP_EMAIL: "false"
       ENABLE_WEBSOCKET: "false"
-      # Python path — ensures imports resolve from /app
       PYTHONPATH: /app
     ports:
       - "8000:8000"
-    volumes:
-      # Mount source for hot-reload
-      - ./backend:/app:cached
+    networks:
+      - society_network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - society_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -86,12 +70,11 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ── React Frontend ─────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: society-food-frontend
+    container_name: society-food-frontend-nobind
     environment:
       REACT_APP_API_URL: http://localhost:8000
       REACT_APP_LOG_LEVEL: debug

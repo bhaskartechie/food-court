@@ -1,24 +1,77 @@
-.App {
-  text-align: center;
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App h1 {
-  margin: 0 0 20px 0;
-  font-size: 48px;
-}
-
-.App p {
-  font-size: 24px;
+body {
   margin: 0;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background: #0f0f1a;
+  color: #f5f5f5;
 }
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(255, 107, 53, 0.18), transparent 33%);
+}
+
+.home-hero {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 107, 53, 0.12);
+}
+
+.feature-card {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 107, 53, 0.45);
+}
+
+.action-button {
+  border-radius: 999px !important;
+}
+
+/* Streaming ingredients overlay */
+.streaming-ingredients-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ingredient-chip {
+  position: absolute;
+  bottom: 8%;
+  transform: translateY(220%);
+  background: linear-gradient(90deg, rgba(255,107,53,0.14), rgba(163,177,138,0.06));
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.04);
+  animation: fly-in 3.5s cubic-bezier(.2,.9,.2,1) forwards;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+@keyframes fly-in {
+  0% { transform: translateY(220%) scale(0.9); opacity: 0; filter: blur(2px); }
+  30% { opacity: 1; transform: translateY(80%) scale(1.02); filter: blur(0); }
+  70% { transform: translateY(8%) scale(0.98); }
+  100% { transform: translateY(0%) scale(1); opacity: 1; }
+}
+
+/* Skeletal loading shimmer for streaming panel */
+.stream-skeleton {
+  height: 12px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 100%);
+  border-radius: 6px;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
