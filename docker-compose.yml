@@ -69,8 +69,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Mount source for hot-reload (--reload in entrypoint.sh)
-      - ./backend:/app
+      # Mount source for hot-reload
+      - ./backend:/app:cached
     depends_on:
       postgres:
         condition: service_healthy

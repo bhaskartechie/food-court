@@ -3,52 +3,52 @@
 #
 # Responsibilities:
 #   1. Wait until PostgreSQL is ready to accept connections
-#   2. Run Alembic migrations (creates tables on first start, applies new ones on updates)
+#   2. Run Alembic migrations (creates tables on first start, applies new ones)
 #   3. Start the uvicorn application server
 #
-# This script ensures migrations always run before the API accepts traffic,
-# preventing "relation does not exist" errors on fresh deployments.
+# This script runs inside the Docker container only.
+# For local development, run uvicorn directly (see README).
 
 set -e
 
 echo "=== Society Food Platform Backend ==="
 echo "Environment: ${ENVIRONMENT:-development}"
+echo "Python path: ${PYTHONPATH:-/app}"
 
-# ─── Wait for PostgreSQL ──────────────────────────────────────────────────────
-# pg_isready is included in the postgresql-client package installed in Dockerfile.
-# It exits 0 when the DB is accepting connections.
-
+# ─── 1. Wait for PostgreSQL ───────────────────────────────────────────────────
+echo ""
 echo "[1/3] Waiting for PostgreSQL to be ready..."
 
 until pg_isready -d "$DATABASE_URL" -q; do
-  echo "  PostgreSQL is not ready yet — retrying in 2 seconds..."
+  echo "  PostgreSQL not ready — retrying in 2 seconds..."
   sleep 2
 done
 
 echo "  ✓ PostgreSQL is ready!"
 
-# ─── Run Alembic Migrations ───────────────────────────────────────────────────
-echo "[2/3] Running database migrations..."
+# ─── 2. Run Alembic Migrations ────────────────────────────────────────────────
+echo ""
+echo "[2/3] Running Alembic migrations..."
 
+# Run from /app (backend root) so alembic.ini and migrations/ are found
 alembic upgrade head
 
-echo "  ✓ Migrations applied successfully"
+echo "  ✓ Migrations applied!"
 
-# ─── Start Application Server ─────────────────────────────────────────────────
-echo "[3/3] Starting uvicorn..."
+# ─── 3. Start Application Server ──────────────────────────────────────────────
+echo ""
+echo "[3/3] Starting uvicorn (app.main:app)..."
 
-# In development: use --reload for hot-reloading
-# In production: use multiple workers (override CMD in prod compose)
 if [ "${ENVIRONMENT}" = "production" ]; then
   WORKERS=${WORKERS:-4}
-  echo "  Production mode: $WORKERS workers"
-  exec uvicorn main:app \
+  echo "  Production mode: $WORKERS workers (no --reload)"
+  exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --workers "$WORKERS"
 else
   echo "  Development mode: single worker with --reload"
-  exec uvicorn main:app \
+  exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --reload
