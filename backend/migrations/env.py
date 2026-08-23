@@ -1,57 +1,49 @@
-"""
-Alembic migration environment configuration.
-
-Key fixes applied:
-1. target_metadata now points to Base.metadata (was None — caused empty migrations)
-2. sqlalchemy.url is overridden from DATABASE_URL environment variable
-3. sys.path is adjusted so db package is importable during migration runs
-"""
-
-import os
-import sys
 from logging.config import fileConfig
-from pathlib import Path
-
-from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
-# ── Ensure the backend directory is on sys.path so 'db' package is importable ──
-# This matters when running alembic from inside the container at /app
-backend_dir = Path(__file__).resolve().parent.parent
-if str(backend_dir) not in sys.path:
-    sys.path.insert(0, str(backend_dir))
+from app.core.config import settings
 
-# ── Import Base with all models registered on it ──
-from db.base import Base  # noqa: E402  (import after path manipulation)
-
-# ── Alembic Config object ──
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
 config = context.config
 
-# ── Override sqlalchemy.url from DATABASE_URL environment variable ──
-database_url = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/society_food",
-)
-config.set_main_option("sqlalchemy.url", database_url)
-
-# ── Set up Python logging from alembic.ini ──
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# ── Tell Alembic about our models so autogenerate works ──
+# add your model's MetaData object here
+# for 'autogenerate' support
+# from myapp import mymodel
+# target_metadata = mymodel.Base.metadata
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL,
+)
+import app.db.models
+from app.db.base import Base
+
 target_metadata = Base.metadata
 
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Migration runners
-# ─────────────────────────────────────────────────────────────────────────────
 
 def run_migrations_offline() -> None:
-    """
-    Run migrations in 'offline' mode.
-    Configures the context with just a URL (no live engine).
-    SQL is emitted to stdout / script output.
+    """Run migrations in 'offline' mode.
+
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a DBAPI to be available.
+
+    Calls to context.execute() here emit the given string to the
+    script output.
+
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -59,7 +51,6 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -67,9 +58,11 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """
-    Run migrations in 'online' mode.
-    Creates an Engine and associates a connection with the context.
+    """Run migrations in 'online' mode.
+
+    In this scenario we need to create an Engine
+    and associate a connection with the context.
+
     """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -78,11 +71,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
