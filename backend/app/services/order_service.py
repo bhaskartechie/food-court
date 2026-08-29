@@ -67,6 +67,17 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
             "price": float(menu.price),
         })
 
+    target_date = None
+    if request.target_delivery_date:
+        from datetime import date as dt_date
+        if isinstance(request.target_delivery_date, str):
+            try:
+                target_date = dt_date.fromisoformat(request.target_delivery_date)
+            except ValueError:
+                target_date = None
+        else:
+            target_date = request.target_delivery_date
+
     order = Order(
         buyer_id=buyer_id,
         seller_id=request.seller_id,
@@ -74,8 +85,13 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
         items=items_data,
         total_price=round(total_price, 2),
         notes=request.notes,
+        is_preorder=request.is_preorder,
+        delivery_slot=request.delivery_slot,
+        target_delivery_date=target_date,
+        delivery_type=request.delivery_type,
     )
     db.add(order)
+
 
     # ── Decrement stock for finite-quantity items ──────────────────────────
     for req_item in request.items:
@@ -191,10 +207,17 @@ def update_order_status(
     order.status = new_status_enum
     if new_status_enum == OrderStatus.completed:
         order.completed_at = datetime.now(UTC)
+        try:
+            from app.services.punctuality_service import update_seller_punctuality_on_order_completed
+            update_seller_punctuality_on_order_completed(db, order.seller_id, order)
+        except Exception as e:
+            # Punctuality calculation should not block order status update
+            pass
 
     db.commit()
     db.refresh(order)
     return order
+
 
 
 def cancel_order(db: Session, order_id: int, buyer_id: int) -> Order:
@@ -212,8 +235,13 @@ def _serialize_orders(orders: list[Order]) -> list[dict]:
             "items": o.items,
             "total_price": float(o.total_price),
             "notes": o.notes,
+            "is_preorder": o.is_preorder,
+            "delivery_slot": o.delivery_slot,
+            "target_delivery_date": str(o.target_delivery_date) if o.target_delivery_date else None,
+            "delivery_type": o.delivery_type,
             "created_at": o.created_at.isoformat(),
             "completed_at": o.completed_at.isoformat() if o.completed_at else None,
         }
         for o in orders
     ]
+

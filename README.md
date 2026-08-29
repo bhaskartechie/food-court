@@ -35,43 +35,49 @@ A home-based food seller platform for residential societies. Connect home chefs 
 - 🚫 No delivery charges – pickup only
 - 💬 Direct communication between seller and buyer
 
-## Phase 1 Features
+## Phase 1 & v1.1 Features
 
 ### For Sellers
-- ✅ Seller registration (admin verification by flat number)
-- ✅ Daily menu creation (Veg, Non-Veg, Snacks, Desserts)
-- ✅ Price setting and menu updates
-- ✅ Order management dashboard
-- ✅ Mark orders as "Ready for Pickup"
-- ✅ View order history and earnings
-- ✅ Accept/reject orders (optional)
-- ✅ Receive ratings from buyers
+- ✅ Seller registration with apartment / flat verification
+- ✅ Open / Closed store status toggle (`PATCH /sellers/me/open`)
+- ✅ Daily menu management with categories (Veg, Non-Veg, Snacks, Desserts, Beverages)
+- ✅ Item availability toggles and price/description updates
+- ✅ Menu item image uploads (`/uploads/menus/`)
+- ✅ Order management dashboard (Accept, Prepare, Mark Ready, Cancel)
+- ✅ In-building door delivery dispatch tracking (`dispatched`, `delivered`, `failed`)
+- ✅ Double-entry financial ledger and real-time balance tracking
+- ✅ Bank details & UPI ID payout management
+- ✅ Customer ratings and review aggregation
 
 ### For Buyers
-- ✅ Browse available sellers and menus
-- ✅ Filter by category (Veg, Non-Veg, Snacks, Desserts)
-- ✅ Place orders (cash on pickup)
-- ✅ Track order status in real-time
-- ✅ Rate sellers (1-5 stars)
-- ✅ View seller ratings and reviews
-- ✅ Order history
+- ✅ Browse neighborhood home chefs and menus
+- ✅ Filter menus by category and keyword search
+- ✅ Place orders with special requests and door delivery notes
+- ✅ Real-time order and delivery status tracking via WebSockets (`/ws/orders/{id}`)
+- ✅ Razorpay online payments with signature verification & automated webhooks
+- ✅ Cash on pickup / door delivery support
+- ✅ Submit seller star ratings (1-5 stars) and reviews
+- ✅ Complete order history and buyer profile management
 
 ### Admin Features
-- ✅ Approve/reject seller registrations
-- ✅ Manage society residents database
-- ✅ Verify flat numbers
-- ✅ Monitor platform activity
+- ✅ Review and approve/reject seller registrations
+- ✅ Society resident database & flat verification
+- ✅ User account activation/deactivation (`/users/{id}/status`)
+- ✅ Platform activity analytics and gross/net revenue metrics
+- ✅ Payment refunds and seller payout processing
 
 ## Tech Stack
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| **Backend** | Python (FastAPI) | 3.10+ |
-| **Frontend** | React + PWA | 18.0+ |
-| **Database** | PostgreSQL | 14+ |
-| **Authentication** | OTP (Email/WhatsApp) | - |
-| **Cache** | Redis (optional) | 7+ |
-| **Containerization** | Docker | 20+ |
+| **Backend API** | Python (FastAPI) | 3.10+ / `v1.1.0-alpha.1` |
+| **Frontend UI** | React + PWA + MUI Dark Theme | 18.0+ |
+| **Database & ORM** | PostgreSQL + SQLAlchemy + Alembic | 14+ |
+| **Authentication** | JWT (Bcrypt + Access/Refresh Tokens + RBAC) | - |
+| **Payments & Ledger** | Razorpay SDK + Double-Entry Ledger Engine | - |
+| **Real-Time Push** | WebSockets (`ConnectionManager`) | - |
+| **Notifications** | Async Email (`aiosmtplib` BackgroundTasks) | - |
+| **Containerization** | Docker & Docker Compose | 20+ |
 | **CI/CD** | GitHub Actions | - |
 
 ## Screenshots

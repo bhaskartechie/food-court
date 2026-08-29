@@ -30,41 +30,48 @@ import {
   Avatar,
   Divider,
   Paper,
+  Badge,
+  IconButton,
 } from '@mui/material';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import StoreIcon from '@mui/icons-material/Store';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import { authAPI, sellersAPI, getErrorMessage } from './services/api';
 import MenuPage from './pages/Menu';
 import OrdersPage from './pages/Orders';
 import ProfilePage from './pages/Profile';
 import SellerDashboardPage from './pages/SellerDashboard';
 import BuyerDashboardPage from './pages/BuyerDashboard';
+import SuggestionsBoard from './pages/SuggestionsBoard';
+import CartDrawer from './components/CartDrawer';
 import Footer from './components/Footer';
 import './App.css';
 import LandingPage from './pages/Landing';
 
-// ── MUI Dark Theme ──────────────────────────────────────────────────────────
+// ── Warm Culinary Theme ───────────────────────────────────────────────────────
 const theme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#FF6B35' },
-    secondary: { main: '#FFD166' },
-    background: { default: '#0f0f1a', paper: '#1a1a2e' },
+    primary: { main: '#E05A2B' },       // Warm Terracotta
+    secondary: { main: '#F6BD60' },     // Honey Saffron
+    success: { main: '#2EC4B6' },       // Fresh Mint
+    background: { default: '#12121A', paper: '#191928' },
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Plus Jakarta Sans", "Inter", "Roboto", sans-serif',
     h4: { fontWeight: 700 },
     h5: { fontWeight: 600 },
   },
   components: {
     MuiCard: {
       styleOverrides: {
-        root: { borderRadius: 12, border: '1px solid rgba(255,107,53,0.15)' },
+        root: { borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)' },
       },
     },
     MuiButton: {
       styleOverrides: {
-        root: { borderRadius: 8, textTransform: 'none', fontWeight: 600 },
+        root: { borderRadius: 10, textTransform: 'none', fontWeight: 600 },
       },
     },
   },
@@ -108,7 +115,7 @@ AuthProvider.propTypes = {
 const useAuth = () => useContext(AuthContext);
 
 // ── Navigation Bar ───────────────────────────────────────────────────────────
-function Navbar() {
+function Navbar({ cartCount, onOpenCart }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -119,27 +126,40 @@ function Navbar() {
   };
 
   return (
-    <AppBar position="sticky" sx={{ background: 'rgba(26,26,46,0.95)', backdropFilter: 'blur(10px)' }}>
+    <AppBar position="sticky" sx={{ background: 'rgba(22,22,34,0.95)', backdropFilter: 'blur(10px)' }}>
       <Toolbar>
         <RestaurantIcon sx={{ color: 'primary.main', mr: 1 }} />
         <Typography variant="h6" component={Link} to="/" sx={{ flexGrow: 1, textDecoration: 'none', color: 'inherit', fontWeight: 700 }}>
           Society Food
         </Typography>
+
+        <Button component={Link} to="/suggestions" color="inherit" size="small" sx={{ mr: 1, color: '#F6BD60' }} startIcon={<LocalFireDepartmentIcon />}>
+          Cravings
+        </Button>
+
         {user ? (
           <>
-            <Button component={Link} to="/buyer" color="inherit" size="small" sx={{ mr: 1 }}>
-              Dashboard
-            </Button>
+            {user.role === 'seller' || user.role === 'admin' ? (
+              <Button component={Link} to="/seller/dashboard" color="inherit" size="small" sx={{ mr: 1 }}>
+                Kitchen Hub
+              </Button>
+            ) : (
+              <Button component={Link} to="/buyer" color="inherit" size="small" sx={{ mr: 1 }}>
+                Dashboard
+              </Button>
+            )}
             <Button component={Link} to="/orders" color="inherit" size="small" sx={{ mr: 1 }}>
               Orders
             </Button>
-            <Button component={Link} to="/profile" color="inherit" size="small" sx={{ mr: 1 }}>
-              Profile
-            </Button>
+            <IconButton onClick={onOpenCart} sx={{ color: '#fff', mr: 1.5 }}>
+              <Badge badgeContent={cartCount} color="primary">
+                <ShoppingBagOutlinedIcon />
+              </Badge>
+            </IconButton>
             <Chip
-              label={`${user.email || 'User'} · ${user.role || 'buyer'}`}
+              label={`${user.name || user.email?.split('@')[0]} (${user.role || 'buyer'})`}
               size="small"
-              sx={{ mr: 2, bgcolor: 'rgba(255,107,53,0.15)', color: 'primary.main' }}
+              sx={{ mr: 2, bgcolor: 'rgba(224,90,43,0.15)', color: 'primary.main', fontWeight: 'bold' }}
             />
             <Button color="inherit" onClick={handleLogout} size="small">
               Logout
@@ -158,6 +178,7 @@ function Navbar() {
 // ── Login Page ───────────────────────────────────────────────────────────────
 function LoginPage() {
   const { login } = useAuth();
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -472,35 +493,151 @@ PrivateRoute.propTypes = {
 };
 
 // ── App Root ──────────────────────────────────────────────────────────────────
+function AppContent() {
+  const { user } = useAuth();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
+  const [activeSellerId, setActiveSellerId] = useState(null);
+  const [activeSellerName, setActiveSellerName] = useState(null);
+  const navigate = useNavigate();
+
+  const handleAddToCart = (item, sellerId, sellerName) => {
+    // If switching sellers, reset basket
+    if (activeSellerId && activeSellerId !== sellerId) {
+      setCartItems([{ ...item, quantity: 1 }]);
+    } else {
+      setCartItems((prev) => {
+        const existing = prev.find((it) => it.id === item.id);
+        if (existing) {
+          return prev.map((it) =>
+            it.id === item.id ? { ...it, quantity: it.quantity + 1 } : it
+          );
+        }
+        return [...prev, { ...item, quantity: 1 }];
+      });
+    }
+    setActiveSellerId(sellerId);
+    if (sellerName) setActiveSellerName(sellerName);
+    setCartOpen(true);
+  };
+
+  const handleUpdateQuantity = (itemId, newQty) => {
+    if (newQty <= 0) {
+      setCartItems((prev) => prev.filter((it) => it.id !== itemId));
+    } else {
+      setCartItems((prev) =>
+        prev.map((it) => (it.id === itemId ? { ...it, quantity: newQty } : it))
+      );
+    }
+  };
+
+  const handleClearCart = () => {
+    setCartItems([]);
+    setActiveSellerId(null);
+    setActiveSellerName(null);
+  };
+
+  const totalCartCount = cartItems.reduce((sum, it) => sum + it.quantity, 0);
+
+  return (
+    <>
+      <Navbar cartCount={totalCartCount} onOpenCart={() => setCartOpen(true)} />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/sellers"
+          element={
+            <PrivateRoute>
+              <SellersPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/menu/:sellerId"
+          element={<MenuPage onAddToCart={handleAddToCart} />}
+        />
+        <Route
+          path="/suggestions"
+          element={<SuggestionsBoard currentUser={user} />}
+        />
+        <Route path="/landing" element={<LandingPage />} />
+        <Route
+          path="/orders"
+          element={
+            <PrivateRoute>
+              <OrdersPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <ProfilePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/buyer"
+          element={
+            <PrivateRoute>
+              <BuyerDashboardPage currentUser={user} />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/seller/dashboard"
+          element={
+            <PrivateRoute>
+              <SellerDashboardPage currentUser={user} />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/seller/dashboard/menus"
+          element={
+            <PrivateRoute>
+              <MenuPage onAddToCart={handleAddToCart} />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/seller/dashboard/orders"
+          element={
+            <PrivateRoute>
+              <OrdersPage />
+            </PrivateRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {/* Global Slide-Out Cart Drawer */}
+      <CartDrawer
+        open={cartOpen}
+        onClose={() => setCartOpen(false)}
+        cartItems={cartItems}
+        onUpdateQuantity={handleUpdateQuantity}
+        onClearCart={handleClearCart}
+        sellerId={activeSellerId}
+        sellerName={activeSellerName}
+        onOrderSuccess={(newOrder) => {
+          navigate('/orders');
+        }}
+      />
+      <Footer />
+    </>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
         <Router>
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/sellers"
-              element={
-                <PrivateRoute>
-                  <SellersPage />
-                </PrivateRoute>
-              }
-            />
-            <Route path="/menu/:sellerId" element={<MenuPage />} />
-            <Route path="/landing" element={<LandingPage />} />
-            <Route path="/orders" element={<PrivateRoute><OrdersPage /></PrivateRoute>} />
-            <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
-            <Route path="/buyer" element={<PrivateRoute><BuyerDashboardPage /></PrivateRoute>} />
-            <Route path="/seller/dashboard" element={<PrivateRoute><SellerDashboardPage /></PrivateRoute>} />
-            <Route path="/seller/dashboard/menus" element={<PrivateRoute><MenuPage /></PrivateRoute>} />
-            <Route path="/seller/dashboard/orders" element={<PrivateRoute><OrdersPage /></PrivateRoute>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          <Footer />
+          <AppContent />
         </Router>
       </AuthProvider>
     </ThemeProvider>
@@ -508,3 +645,4 @@ function App() {
 }
 
 export default App;
+

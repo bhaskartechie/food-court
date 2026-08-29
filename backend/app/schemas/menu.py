@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-VALID_CATEGORIES = {"veg", "non-veg", "snacks", "desserts"}
+VALID_CATEGORIES = {"veg", "non-veg", "snacks", "desserts", "beverages", "other"}
 
 
 class MenuCreateRequest(BaseModel):
@@ -12,9 +12,15 @@ class MenuCreateRequest(BaseModel):
 
     name: str
     description: str = ""
-    category: str  # "veg" | "non-veg" | "snacks" | "desserts"
+    category: str  # "veg" | "non-veg" | "snacks" | "desserts" | "beverages" | "other"
     price: float
     is_available: bool = True
+    is_preorder_only: bool = False
+    preorder_cutoff_time: str | None = None
+    available_slots: list[str] | None = None
+    max_batch_quantity: int = 0
+    min_lead_time_hours: int = 2
+    image_url: str | None = None
 
     @field_validator("category")
     @classmethod
@@ -40,6 +46,13 @@ class MenuUpdateRequest(BaseModel):
     description: str | None = None
     price: float | None = None
     category: str | None = None
+    is_available: bool | None = None
+    is_preorder_only: bool | None = None
+    preorder_cutoff_time: str | None = None
+    available_slots: list[str] | None = None
+    max_batch_quantity: int | None = None
+    min_lead_time_hours: int | None = None
+    image_url: str | None = None
 
     @field_validator("category")
     @classmethod
@@ -67,5 +80,12 @@ class MenuItemResponse(BaseModel):
     category: str
     price: float
     is_available: bool
+    is_preorder_only: bool = False
+    preorder_cutoff_time: str | None = None
+    available_slots: list[str] | None = None
+    max_batch_quantity: int = 0
+    min_lead_time_hours: int = 2
+    image_url: str | None = None
 
     model_config = {"from_attributes": True}
+

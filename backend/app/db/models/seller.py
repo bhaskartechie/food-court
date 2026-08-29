@@ -40,10 +40,18 @@ class SellerProfile(TimestampMixin, Base):
     # Profile photo URL (CDN / S3 link)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    # ── Aggregate Rating ──────────────────────────────────────────────────────
+    # ── Aggregate Rating (Customer Reviews) ───────────────────────────────────
     # Rating 1–5 with 0.2 precision; updated by rating_service after each review
     rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     review_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # ── Punctuality & Reliability Metrics (Automated) ─────────────────────────
+    # Computed from completed order timestamps vs. estimated/slot deadlines
+    on_time_delivery_rate: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
+    punctuality_rating: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
+    avg_delivery_minutes: Mapped[int] = mapped_column(Integer, default=25, nullable=False)
+    total_orders_completed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
 
     # ── Availability ──────────────────────────────────────────────────────────
     # Sellers can toggle themselves open/closed without affecting menus or approval.

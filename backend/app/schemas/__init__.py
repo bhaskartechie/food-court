@@ -46,6 +46,12 @@ from app.schemas.seller import (
     SellerResponse,
     SellerUpdateRequest,
 )
+from app.schemas.suggestion import (
+    SuggestionClaimRequest,
+    SuggestionCreateRequest,
+    SuggestionResponse,
+    UpvoteResponse,
+)
 
 __all__ = [
     "AvailabilityRequest",
@@ -85,6 +91,12 @@ __all__ = [
     "SellerRegisterRequest",
     "SellerResponse",
     "SellerUpdateRequest",
+    # Suggestion
+    "SuggestionClaimRequest",
+    "SuggestionCreateRequest",
+    "SuggestionResponse",
     "TokenResponse",
+    "UpvoteResponse",
     "UserInfo",
 ]
+

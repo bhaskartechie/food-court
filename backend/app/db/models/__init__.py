@@ -17,10 +17,13 @@ from app.db.models.payment import Payment
 from app.db.models.payout import Payout
 from app.db.models.rating import Rating
 from app.db.models.seller import SellerProfile
+from app.db.models.suggestion import DishSuggestion, DishUpvote
 from app.db.models.user import User
 
 __all__ = [
     "Delivery",
+    "DishSuggestion",
+    "DishUpvote",
     "LedgerEntry",
     "Menu",
     "Order",
@@ -30,4 +33,5 @@ __all__ = [
     "SellerProfile",
     "User",
 ]
+
 

@@ -1,15 +1,13 @@
-"""Order model — a purchase placed by a buyer from a seller."""
-
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Numeric, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.base import Base, TimestampMixin
-from app.db.models.enums import OrderStatus
+from app.db.models.enums import DeliveryType, OrderStatus
 
 if TYPE_CHECKING:
     from app.db.models.payment import Payment
@@ -50,10 +48,28 @@ class Order(TimestampMixin, Base):
     # Optional buyer note to the seller
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # ── Pre-Order & Fulfillment Fields ─────────────────────────────────────────
+    # Whether this order is a scheduled pre-order batch
+    is_preorder: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Delivery/Pickup slot (e.g. "lunch_today", "dinner_today", "12:30 PM - 1:30 PM")
+    delivery_slot: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Target scheduled date for pre-order delivery/pickup
+    target_delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Fulfillment mode: doorstep delivery to flat vs self-pickup
+    delivery_type: Mapped[DeliveryType] = mapped_column(
+        SAEnum(DeliveryType, name="deliverytype", create_constraint=True),
+        nullable=False,
+        default=DeliveryType.doorstep,
+    )
+
     # Set when status transitions to 'completed'
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
 
     # ── Relationships ─────────────────────────────────────────────────────────
     buyer: Mapped["User"] = relationship(

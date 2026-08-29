@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 import { Box, TextField, Button, Rating } from '@mui/material';
 import { ratingsAPI } from '../services/api';
 
@@ -30,3 +31,9 @@ export default function RatingForm({ orderId, onSubmitted }) {
     </Box>
   );
 }
+
+RatingForm.propTypes = {
+  orderId: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  onSubmitted: PropTypes.func,
+};
+

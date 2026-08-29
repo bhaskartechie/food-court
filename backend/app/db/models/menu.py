@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
@@ -50,10 +50,28 @@ class Menu(TimestampMixin, Base):
     # Optional image URL (CDN / S3)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # ── Pre-Order Configuration ───────────────────────────────────────────────
+    # Whether this item requires advance pre-ordering (vs instant ready meal)
+    is_preorder_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Daily cutoff time string for pre-orders (e.g. "10:30" or "16:00")
+    preorder_cutoff_time: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
+    # List of allowed delivery slots: e.g. ["lunch_today", "dinner_today", "weekend_special"]
+    available_slots: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
+    # Maximum portion batch size per slot (0 = unlimited)
+    max_batch_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Minimum advance notice in hours before delivery slot (e.g. 2, 4, 24)
+    min_lead_time_hours: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+
     # ── Relationships ─────────────────────────────────────────────────────────
     seller: Mapped["SellerProfile"] = relationship(
         "SellerProfile", back_populates="menus"
     )
+
 
     # ── Validators ────────────────────────────────────────────────────────────
 

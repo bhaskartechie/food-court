@@ -64,6 +64,11 @@ def get_seller_menus(
                 "is_available": item.is_available,
                 "quantity": item.quantity,
                 "image_url": item.image_url,
+                "is_preorder_only": item.is_preorder_only,
+                "preorder_cutoff_time": item.preorder_cutoff_time,
+                "available_slots": item.available_slots or [],
+                "max_batch_quantity": item.max_batch_quantity,
+                "min_lead_time_hours": item.min_lead_time_hours,
             }
             for item in items
         ],
@@ -91,6 +96,12 @@ def create_menu_item(
         category=request.category,
         price=request.price,
         is_available=request.is_available,
+        is_preorder_only=request.is_preorder_only,
+        preorder_cutoff_time=request.preorder_cutoff_time,
+        available_slots=request.available_slots,
+        max_batch_quantity=request.max_batch_quantity,
+        min_lead_time_hours=request.min_lead_time_hours,
+        image_url=request.image_url,
     )
     db.add(item)
     db.commit()
@@ -127,11 +138,26 @@ def update_menu_item(
         item.price = request.price
     if request.category is not None:
         item.category = request.category
+    if request.is_available is not None:
+        item.is_available = request.is_available
+    if request.is_preorder_only is not None:
+        item.is_preorder_only = request.is_preorder_only
+    if request.preorder_cutoff_time is not None:
+        item.preorder_cutoff_time = request.preorder_cutoff_time
+    if request.available_slots is not None:
+        item.available_slots = request.available_slots
+    if request.max_batch_quantity is not None:
+        item.max_batch_quantity = request.max_batch_quantity
+    if request.min_lead_time_hours is not None:
+        item.min_lead_time_hours = request.min_lead_time_hours
+    if request.image_url is not None:
+        item.image_url = request.image_url
 
     item.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(item)
     return item
+
 
 
 def delete_menu_item(db: Session, menu_id: int, owner_id: int | None = None) -> None:

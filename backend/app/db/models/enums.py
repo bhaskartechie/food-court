@@ -92,3 +92,31 @@ class DeliveryStatus(str, enum.Enum):
     dispatched = "dispatched"  # Seller has picked up the food and is en route
     delivered = "delivered"    # Food handed to buyer at their door
     failed = "failed"          # Delivery could not be completed
+
+
+class DeliverySlot(str, enum.Enum):
+    """Scheduled delivery / pickup slots for pre-orders."""
+
+    lunch_today = "lunch_today"          # 12:30 PM – 1:30 PM Today
+    dinner_today = "dinner_today"        # 7:30 PM – 8:30 PM Today
+    lunch_tomorrow = "lunch_tomorrow"    # 12:30 PM – 1:30 PM Tomorrow
+    dinner_tomorrow = "dinner_tomorrow"  # 7:30 PM – 8:30 PM Tomorrow
+    weekend_special = "weekend_special"  # Saturday / Sunday Special Batch
+    custom = "custom"
+
+
+class DeliveryType(str, enum.Enum):
+    """Fulfillment method chosen by the buyer."""
+
+    doorstep = "doorstep"      # In-building delivery to buyer's flat
+    self_pickup = "self_pickup"  # Buyer picks up from seller's flat
+
+
+class SuggestionStatus(str, enum.Enum):
+    """Lifecycle status for community dish suggestions."""
+
+    open = "open"                      # Active for community upvotes
+    claimed_by_chef = "claimed_by_chef"  # Chef agreed to cook; pre-order opened
+    fulfilled = "fulfilled"            # Batch completed
+    closed = "closed"                  # Expired or closed
+
