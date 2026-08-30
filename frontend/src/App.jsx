@@ -608,14 +608,29 @@ function SellersPage() {
                   </Typography>
                 )}
               </CardContent>
-              <CardActions>
-                <Button size="small" variant="outlined" color="primary">
+              <CardActions sx={{ px: 2, pb: 2, gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  component={Link}
+                  to={`/menu/${seller.id}`}
+                  sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                >
                   View Menu
                 </Button>
-                <Button size="small" color="secondary">
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  component={Link}
+                  to={`/menu/${seller.id}`}
+                  sx={{ bgcolor: '#E05A2B', textTransform: 'none', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
+                >
                   Order Now
                 </Button>
               </CardActions>
+
             </Card>
           </Grid>
         ))}
@@ -754,6 +769,11 @@ function AppContent() {
           path="/menu/:sellerId"
           element={<MenuPage onAddToCart={handleAddToCart} />}
         />
+        <Route
+          path="/menus/:sellerId"
+          element={<MenuPage onAddToCart={handleAddToCart} />}
+        />
+
         <Route
           path="/suggestions"
           element={<SuggestionsBoard currentUser={user} />}

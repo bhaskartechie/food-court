@@ -13,6 +13,7 @@ Triggered from:
 """
 
 import logging
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -29,17 +30,25 @@ def _is_email_configured() -> bool:
     return bool(settings.SMTP_USERNAME and settings.SMTP_PASSWORD)
 
 
-def _build_message(to_email: str, subject: str, body_html: str) -> MIMEMultipart:
-    """Build a MIME email message."""
+def _build_message(to_email: str, subject: str, body_html: str, body_text: str | None = None) -> MIMEMultipart:
+    """Build a standard multipart/alternative MIME email with plain text and HTML."""
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
+    msg["Subject"] = Header(subject, "utf-8")
     msg["From"] = f"{settings.SENDER_NAME} <{settings.SENDER_EMAIL}>"
     msg["To"] = to_email
-    msg.attach(MIMEText(body_html, "html"))
+
+    # Plain text version (essential for spam filter passability)
+    if not body_text:
+        # Fallback text representation
+        import re
+        body_text = re.sub(r"<[^>]+>", " ", body_html).strip()
+
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
     return msg
 
 
-async def _send(to_email: str, subject: str, body_html: str) -> None:
+async def _send(to_email: str, subject: str, body_html: str, body_text: str | None = None) -> None:
     """Send a single email via aiosmtplib. No-op if SMTP is not configured."""
     if not _is_email_configured():
         logger.debug("SMTP not configured — skipping email to %s: %s", to_email, subject)
@@ -48,7 +57,7 @@ async def _send(to_email: str, subject: str, body_html: str) -> None:
     # Sanitize SMTP password in case spaces were included
     smtp_password = settings.SMTP_PASSWORD.replace(" ", "") if settings.SMTP_PASSWORD else ""
 
-    msg = _build_message(to_email, subject, body_html)
+    msg = _build_message(to_email, subject, body_html, body_text)
     try:
         await aiosmtplib.send(
             msg,
@@ -56,6 +65,8 @@ async def _send(to_email: str, subject: str, body_html: str) -> None:
             port=settings.SMTP_PORT,
             username=settings.SMTP_USERNAME,
             password=smtp_password,
+            sender=settings.SENDER_EMAIL,
+            recipients=[to_email],
             start_tls=True,
         )
         logger.info("Email sent → %s | %s", to_email, subject)
@@ -69,7 +80,8 @@ async def _send(to_email: str, subject: str, body_html: str) -> None:
 async def send_otp_email(to_email: str, otp: str) -> None:
     """Send a 6-digit login OTP to a resident or chef (called via BackgroundTask)."""
     subject = f"🔐 {otp} is your Society Food verification code"
-    body = f"""
+    body_text = f"Your Society Food verification code is: {otp}\n\nThis code is valid for {settings.OTP_EXPIRY_MINUTES} minutes.\nDo not share this code with anyone.\n\n— {settings.SENDER_NAME}"
+    body_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -112,7 +124,8 @@ async def send_otp_email(to_email: str, otp: str) -> None:
     </body>
     </html>
     """
-    await _send(to_email, subject, body)
+    await _send(to_email, subject, body_html, body_text)
+
 
 
 async def send_otp_whatsapp(phone: str, otp: str) -> None:

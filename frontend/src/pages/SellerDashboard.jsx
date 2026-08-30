@@ -177,7 +177,25 @@ export default function SellerDashboardPage({ currentUser }) {
           <Typography variant="body2" color="text.secondary" mt={0.5}>
             Manage incoming orders, morning prep batches, and society door deliveries.
           </Typography>
+          <Box display="flex" flexWrap="wrap" gap={1} mt={1.5}>
+            <Chip
+              label={`⚡ ${sellerProfile?.on_time_delivery_rate ?? 98.5}% on-time`}
+              size="small"
+              sx={{ bgcolor: 'rgba(46, 196, 182, 0.15)', color: '#2EC4B6', fontWeight: 'bold' }}
+            />
+            <Chip
+              label={`⏱️ ~${sellerProfile?.avg_delivery_minutes ?? 22}m avg prep`}
+              size="small"
+              sx={{ bgcolor: 'rgba(246, 189, 96, 0.15)', color: '#F6BD60', fontWeight: 'bold' }}
+            />
+            <Chip
+              label={`⭐ ${sellerProfile?.punctuality_rating?.toFixed(1) ?? '4.9'} ★`}
+              size="small"
+              sx={{ bgcolor: 'rgba(255, 107, 53, 0.15)', color: '#FF6B35', fontWeight: 'bold' }}
+            />
+          </Box>
         </Box>
+
 
         <Box display="flex" alignItems="center" gap={2}>
           <FormControlLabel

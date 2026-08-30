@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     PLATFORM_FEE_PERCENT: float = 5.0
 
     # ── Feature Flags ─────────────────────────────────────────────────────────
-    ENABLE_OTP_EMAIL: bool = False  # True → send OTP via SMTP (future)
+    ENABLE_OTP_EMAIL: bool = True  # True → send OTP via SMTP
     ENABLE_OTP_WHATSAPP: bool = False
     ENABLE_WEBSOCKET: bool = False
 
@@ -78,10 +78,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_PERIOD: int = 60
 
     model_config = {
-        "env_file": ".env",
+        "env_file": (".env", "backend/.env", "../.env"),
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
+        "extra": "ignore",
     }
+
 
 
 @lru_cache()

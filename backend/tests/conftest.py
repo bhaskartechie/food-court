@@ -74,3 +74,26 @@ def buyer_token(test_buyer: User) -> str:
 @pytest.fixture
 def buyer_headers(buyer_token: str) -> dict:
     return {"Authorization": f"Bearer {buyer_token}"}
+
+@pytest.fixture
+def test_seller(db: Session) -> User:
+    user = User(
+        name="Test Seller",
+        email="seller_fixture@test.com",
+        hashed_password=hash_password("password123"),
+        role=UserRole.seller,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@pytest.fixture
+def seller_token(test_seller: User) -> str:
+    return create_access_token(test_seller.id, str(test_seller.role))
+
+@pytest.fixture
+def seller_headers(seller_token: str) -> dict:
+    return {"Authorization": f"Bearer {seller_token}"}
+

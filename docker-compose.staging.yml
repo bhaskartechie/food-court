@@ -44,6 +44,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: society-food-backend-staging
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-staging_secure_pass}@postgres:5432/society_food_staging
       REDIS_URL: redis://redis:6379/0
@@ -54,9 +56,16 @@ services:
       LOG_LEVEL: INFO
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost,http://127.0.0.1}
       WORKERS: 2
-      ENABLE_OTP_EMAIL: "false"
+      ENABLE_OTP_EMAIL: "true"
       ENABLE_WEBSOCKET: "true"
       PYTHONPATH: /app
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-babu.kishore26@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-hyhnbcopwgmlfxjx}
+      SENDER_EMAIL: ${SENDER_EMAIL:-babu.kishore26@gmail.com}
+      SENDER_NAME: ${SENDER_NAME:-Society Food Platform}
+
     ports:
       - "8000:8000"
     depends_on:

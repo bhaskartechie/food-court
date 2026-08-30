@@ -62,6 +62,28 @@ async def create_order(
     return OrderResponse.model_validate(order)
 
 
+@router.get("/", status_code=status.HTTP_200_OK)
+async def list_orders(
+    skip: int = 0,
+    limit: int = 20,
+    status: str | None = None,
+    current_user: User = GET_USER_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    List orders for current user:
+    - If seller: returns orders placed to this seller's kitchen
+    - If buyer/admin: returns orders placed by this buyer
+    """
+    if current_user.role == "seller":
+        return order_service.get_seller_orders(
+            db, seller_id=current_user.id, skip=skip, limit=limit, status_filter=status
+        )
+    return order_service.get_buyer_orders(
+        db, buyer_id=current_user.id, skip=skip, limit=limit, status_filter=status
+    )
+
+
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
@@ -71,6 +93,18 @@ async def get_order(
     """Get details of a specific order."""
     order = order_service.get_order_by_id(db, order_id)
     return OrderResponse.model_validate(order)
+
+
+@router.delete("/{order_id}", response_model=OrderResponse)
+async def cancel_order(
+    order_id: int,
+    current_user: User = GET_USER_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """Cancel a pending order (buyer only)."""
+    order = order_service.cancel_order(db, order_id=order_id, buyer_id=current_user.id)
+    return OrderResponse.model_validate(order)
+
 
 
 @router.put("/{order_id}/status", response_model=OrderResponse)

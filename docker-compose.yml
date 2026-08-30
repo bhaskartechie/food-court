@@ -47,6 +47,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: society-food-backend
+    env_file:
+      - ./backend/.env
     environment:
       # Database — points to postgres service by service name
       DATABASE_URL: postgresql://postgres:password@postgres:5432/society_food
@@ -62,10 +64,17 @@ services:
       # CORS — allow the frontend origin
       CORS_ORIGINS: "http://localhost:3000,http://localhost"
       # Feature flags
-      ENABLE_OTP_EMAIL: "false"     # Disable real email in dev
+      ENABLE_OTP_EMAIL: "true"
       ENABLE_WEBSOCKET: "false"
       # Python path — ensures imports resolve from /app
       PYTHONPATH: /app
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-babu.kishore26@gmail.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-hyhnbcopwgmlfxjx}
+      SENDER_EMAIL: ${SENDER_EMAIL:-babu.kishore26@gmail.com}
+      SENDER_NAME: ${SENDER_NAME:-Society Food Platform}
+
     ports:
       - "8000:8000"
     volumes:
