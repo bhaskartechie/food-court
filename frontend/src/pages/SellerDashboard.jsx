@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import PropTypes from 'prop-types';
 import {
   Container,
   Typography,
@@ -13,6 +12,8 @@ import {
   FormControlLabel,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,14 +27,15 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import {
   ordersAPI,
   sellersAPI,
   menusAPI,
   paymentsAPI,
+  deliveryAPI,
   getErrorMessage,
 } from '../services/api';
-
 
 const SLOT_LABELS = {
   lunch_today: '☀️ Lunch Today',
@@ -283,40 +285,23 @@ export default function SellerDashboardPage({ currentUser }) {
                 </Box>
               </Box>
 
-              <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', my: 1.5 }} />
-
-              {/* Speed & Reliability Score */}
-              <Box display="flex" justifyContent="space-between" alignItems="center">
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    ⚡ On-Time Rate
-                  </Typography>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#2EC4B6">
-                    {sellerProfile?.on_time_delivery_rate ?? 100}%
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    ⏱️ Avg Speed
-                  </Typography>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#F6BD60">
-                    ~{sellerProfile?.avg_delivery_minutes ?? 25}m
-                  </Typography>
-                </Box>
-                <Box textAlign="right">
-                  <Typography variant="caption" color="text.secondary">
-                    🎯 Reliability
-                  </Typography>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#E05A2B">
-                    {sellerProfile?.punctuality_rating ?? 5.0} ★
-                  </Typography>
-                </Box>
-              </Box>
+              <Button
+                fullWidth
+                variant="outlined"
+                disabled={balance.current_balance <= 0}
+                sx={{
+                  color: '#2EC4B6',
+                  borderColor: '#2EC4B6',
+                  fontWeight: 'bold',
+                  textTransform: 'none',
+                }}
+              >
+                Request Payout
+              </Button>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
 
       {/* Orders Board */}
       <Typography variant="h5" fontWeight="bold" mb={2}>
@@ -541,14 +526,4 @@ export default function SellerDashboardPage({ currentUser }) {
     </Container>
   );
 }
-
-SellerDashboardPage.propTypes = {
-  currentUser: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    name: PropTypes.string,
-    email: PropTypes.string,
-    role: PropTypes.string,
-  }),
-};
-
 

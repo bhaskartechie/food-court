@@ -14,21 +14,33 @@ Future OTP routes (/api/v1/auth/otp/*):
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db
-from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+    generate_otp,
+    store_otp,
+    verify_otp,
+)
 from app.db.models import User
 from app.schemas.auth import (
     LoginRequest,
+    OTPRequest,
+    OTPRequestResponse,
+    OTPVerifyRequest,
     RefreshRequest,
     RefreshResponse,
     RegisterRequest,
     TokenResponse,
     UserInfo,
 )
-from app.services import auth_service
+from app.services import auth_service, notification_service
+
 
 logger = logging.getLogger(__name__)
 
@@ -175,22 +187,103 @@ async def change_password(
     return {"message": "Password changed successfully."}
 
 
-# ── Future OTP Routes (not yet implemented) ────────────────────────────────────
+# ── Passwordless OTP Authentication ───────────────────────────────────────────
 
 
-@router.post("/otp/request", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def request_otp():
-    """Request an OTP via email or phone. (Coming soon — not yet implemented.)"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="OTP authentication is coming soon. Please use email + password for now.",
+@router.post("/otp/request", response_model=OTPRequestResponse, status_code=status.HTTP_200_OK)
+async def request_otp(
+    request: OTPRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Request a one-time login password (OTP) via Email or WhatsApp.
+
+    - Generates a 6-digit numeric cryptographic OTP.
+    - Stores the OTP in Redis/memory with a 10-minute TTL.
+    - Sends an email in the background via SMTP (aiosmtplib).
+    - If in development mode or SMTP is unconfigured, returns dev_otp in the response for easy testing.
+    """
+    otp = generate_otp(length=settings.OTP_LENGTH)
+    store_otp(str(request.email), otp)
+
+    if request.channel == "whatsapp" and request.phone:
+        background_tasks.add_task(
+            notification_service.send_otp_whatsapp,
+            phone=request.phone,
+            otp=otp,
+        )
+    else:
+        background_tasks.add_task(
+            notification_service.send_otp_email,
+            to_email=str(request.email),
+            otp=otp,
+        )
+
+    logger.info("OTP requested for %s via %s", request.email, request.channel)
+
+    is_dev = settings.ENVIRONMENT in ("development", "test")
+    return OTPRequestResponse(
+        message=f"OTP successfully dispatched to {request.email}.",
+        expires_in_minutes=settings.OTP_EXPIRY_MINUTES,
+        dev_otp=otp if is_dev else None,
     )
 
 
-@router.post("/otp/verify", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def verify_otp_route():
-    """Verify OTP and log in. (Coming soon — not yet implemented.)"""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="OTP authentication is coming soon. Please use email + password for now.",
+@router.post("/otp/verify", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+async def verify_otp_route(
+    request: OTPVerifyRequest,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Verify a one-time password (OTP) and authenticate the resident.
+
+    - Verifies the OTP with attempt-rate limiting (max 5 attempts -> 429).
+    - On success: consumes the OTP (single use).
+    - Looks up the user or auto-creates a new resident account.
+    - Marks user as verified.
+    - Issues JWT access + refresh tokens.
+    """
+    is_valid = verify_otp(str(request.email), request.otp)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP. Please check the code and try again.",
+        )
+
+    # Find or auto-provision resident user
+    display_name = request.name.strip() if request.name and request.name.strip() else str(request.email).split("@")[0]
+    user, _ = auth_service.find_or_create_user(
+        db,
+        email=str(request.email),
+        name=display_name,
+        role=request.role,
     )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been deactivated. Please contact support.",
+        )
+
+    auth_service.mark_user_verified(db, user)
+
+    access_token = create_access_token(user.id, user.role)
+    refresh_token = create_refresh_token(user.id, user.role)
+
+    logger.info("User authenticated via OTP: %s (role=%s)", user.email, user.role)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserInfo(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            role=user.role,
+            flat_number=user.flat_number,
+            verification_status=user.verification_status,
+            is_verified=user.is_verified,
+        ),
+    )
+

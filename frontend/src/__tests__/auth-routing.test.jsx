@@ -21,5 +21,17 @@ describe('Authentication & Landing Experience', () => {
     const loginLinks = screen.getAllByRole('link', { name: /Login/i });
     expect(loginLinks.length).toBeGreaterThanOrEqual(1);
   });
+
+  test('renders Instant OTP, Password, and Register tabs on /login page', () => {
+    window.history.pushState({}, 'Login', '/login');
+    render(<App />);
+
+    expect(screen.getByRole('tab', { name: /Instant OTP/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Password/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Register/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Send Verification Code/i })).toBeInTheDocument();
+  });
 });
+
+
 

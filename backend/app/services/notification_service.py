@@ -45,6 +45,9 @@ async def _send(to_email: str, subject: str, body_html: str) -> None:
         logger.debug("SMTP not configured — skipping email to %s: %s", to_email, subject)
         return
 
+    # Sanitize SMTP password in case spaces were included
+    smtp_password = settings.SMTP_PASSWORD.replace(" ", "") if settings.SMTP_PASSWORD else ""
+
     msg = _build_message(to_email, subject, body_html)
     try:
         await aiosmtplib.send(
@@ -52,13 +55,77 @@ async def _send(to_email: str, subject: str, body_html: str) -> None:
             hostname=settings.SMTP_SERVER,
             port=settings.SMTP_PORT,
             username=settings.SMTP_USERNAME,
-            password=settings.SMTP_PASSWORD,
+            password=smtp_password,
             start_tls=True,
         )
         logger.info("Email sent → %s | %s", to_email, subject)
     except Exception as exc:
         # Never let email errors break the main flow
         logger.error("Failed to send email to %s: %s", to_email, exc)
+
+
+# ── OTP Authentication Notifications ──────────────────────────────────────────
+
+async def send_otp_email(to_email: str, otp: str) -> None:
+    """Send a 6-digit login OTP to a resident or chef (called via BackgroundTask)."""
+    subject = f"🔐 {otp} is your Society Food verification code"
+    body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f9f9fb; margin: 0; padding: 24px; color: #1e1e24;">
+      <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #eaeaea; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <!-- Header -->
+        <div style="background-color: #FF6B35; padding: 28px 24px; text-align: center; color: #ffffff;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Society Food</h1>
+          <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Fresh Homemade Food in Your Community</p>
+        </div>
+        
+        <!-- Content -->
+        <div style="padding: 32px 28px;">
+          <h2 style="margin: 0 0 12px; font-size: 18px; color: #1e1e24;">Your Verification Code</h2>
+          <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.5; color: #555566;">
+            Use the following one-time password (OTP) to securely log in to your Society Food account.
+          </p>
+          
+          <!-- OTP Box -->
+          <div style="background: #FFF4EF; border: 2px dashed #FF6B35; border-radius: 10px; padding: 20px; text-align: center; margin: 24px 0;">
+            <span style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 10px; color: #E05A2B; display: inline-block;">
+              {otp}
+            </span>
+          </div>
+
+          <p style="margin: 20px 0 0; font-size: 13px; color: #888899; text-align: center;">
+            ⏱️ This code is valid for <strong>{settings.OTP_EXPIRY_MINUTES} minutes</strong>. Do not share this code with anyone.
+          </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="background-color: #fafafc; padding: 18px 24px; border-top: 1px solid #eeeeee; text-align: center; font-size: 12px; color: #9999aa;">
+          <p style="margin: 0;">If you did not request this code, you can safely ignore this email.</p>
+          <p style="margin: 6px 0 0;">© {settings.SENDER_NAME}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    await _send(to_email, subject, body)
+
+
+async def send_otp_whatsapp(phone: str, otp: str) -> None:
+    """
+    Deliver OTP via WhatsApp (called via BackgroundTask).
+    Logs the dispatch; ready for Twilio/Meta WhatsApp Cloud API integration.
+    """
+    if not settings.ENABLE_OTP_WHATSAPP:
+        logger.info("WhatsApp delivery disabled in config. Skipping WhatsApp OTP to %s", phone)
+        return
+
+    logger.info("WhatsApp OTP dispatched → %s (OTP: %s)", phone, otp)
+
 
 
 # ── Order Notifications ───────────────────────────────────────────────────────

@@ -1,7 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import * as apiModule from '../services/api';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import SellerDashboardPage from '../pages/SellerDashboard';
 
 const mockProfile = {
@@ -14,7 +12,7 @@ const mockProfile = {
   total_orders_completed: 48,
 };
 
-const mockOrderList = [
+const mockOrders = [
   {
     id: 201,
     buyer_id: 1,
@@ -29,41 +27,28 @@ const mockOrderList = [
   },
 ];
 
+jest.mock('../services/api', () => ({
+  sellersAPI: {
+    getMe: jest.fn(() => Promise.resolve({ data: mockProfile })),
+    toggleOpen: jest.fn(() => Promise.resolve({ data: { is_open: false } })),
+  },
+  ordersAPI: {
+    list: jest.fn(() => Promise.resolve({ data: { orders: mockOrders } })),
+    updateStatus: jest.fn(() => Promise.resolve({ data: { status: 'accepted' } })),
+  },
+  menusAPI: {
+    bySeller: jest.fn(() => Promise.resolve({ data: { items: [] } })),
+    create: jest.fn(() => Promise.resolve({ data: { id: 10 } })),
+  },
+  paymentsAPI: {
+    getBalance: jest.fn(() => Promise.resolve({ data: { current_balance: 1450.0, total_earned: 8900.0 } })),
+  },
+  getErrorMessage: jest.fn((err, fallback) => fallback),
+}));
+
 describe('Seller Kitchen Command Center', () => {
-  beforeEach(() => {
-    jest.spyOn(apiModule.sellersAPI, 'getMe').mockResolvedValue({
-      data: mockProfile,
-    });
-    jest.spyOn(apiModule.sellersAPI, 'setOpenStatus').mockResolvedValue({
-      data: { is_open: false },
-    });
-    jest.spyOn(apiModule.ordersAPI, 'list').mockResolvedValue({
-      data: { orders: mockOrderList },
-    });
-    jest.spyOn(apiModule.ordersAPI, 'updateStatus').mockResolvedValue({
-      data: { status: 'accepted' },
-    });
-    jest.spyOn(apiModule.menusAPI, 'bySeller').mockResolvedValue({
-      data: { items: [] },
-    });
-    jest.spyOn(apiModule.menusAPI, 'create').mockResolvedValue({
-      data: { id: 10 },
-    });
-    jest.spyOn(apiModule.paymentsAPI, 'getBalance').mockResolvedValue({
-      data: { current_balance: 1450.0, total_earned: 8900.0 },
-    });
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   test('renders kitchen hub with punctuality health metrics and batch prep sheet', async () => {
-    render(
-      <MemoryRouter>
-        <SellerDashboardPage currentUser={{ id: 2, name: 'Chef Meera', role: 'seller' }} />
-      </MemoryRouter>
-    );
+    render(<SellerDashboardPage currentUser={{ id: 2, name: 'Chef Meera', role: 'seller' }} />);
 
     // Check title
     expect(screen.getByText(/Kitchen Command Center/i)).toBeInTheDocument();
@@ -86,5 +71,4 @@ describe('Seller Kitchen Command Center', () => {
     expect(screen.getByRole('button', { name: /Accept Order/i })).toBeInTheDocument();
   });
 });
-
 

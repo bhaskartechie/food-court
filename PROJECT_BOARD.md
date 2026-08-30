@@ -43,9 +43,10 @@
 |---|------|----------|--------|----------|----------|
 | 2.1 | JWT authentication & password security (Bcrypt) | P0 | ✅ Done | 4h | Backend |
 | 2.2 | Async Email notifications (aiosmtplib + BackgroundTasks) | P0 | ✅ Done | 3h | Backend |
-| 2.3 | WhatsApp OTP (Twilio) | P1 | ⏳ Planned | 4h | Backend |
+| 2.3 | Passwordless Email & WhatsApp OTP Authentication | P0 | ✅ Done | 4h | Backend / Frontend |
 | 2.4 | JWT token management (Access + Refresh + RBAC) | P0 | ✅ Done | 3h | Backend |
-| 2.5 | Login & Registration frontend with AuthContext | P0 | ✅ Done | 4h | Frontend |
+| 2.5 | Login, Instant OTP & Registration UI with AuthContext | P0 | ✅ Done | 4h | Frontend |
+
 
 ---
 

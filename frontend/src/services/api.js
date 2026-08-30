@@ -21,8 +21,47 @@ const api = axios.create({
 
 export const getErrorMessage = (error, fallback = 'Something went wrong.') => {
   if (!error) return fallback;
-  const detail = error.response?.data?.detail || error.response?.data?.message;
-  return detail || error.message || fallback;
+
+  // Handle Axios / Fetch response details
+  const detail = error.response?.data?.detail ?? error.response?.data?.message;
+
+  // 1. If detail is an array of Pydantic validation error objects (FastAPI 422)
+  if (Array.isArray(detail)) {
+    const formatted = detail
+      .map((err) => {
+        if (typeof err === 'string') return err;
+        if (typeof err === 'object' && err !== null) {
+          const loc = Array.isArray(err.loc)
+            ? err.loc.filter((part) => part !== 'body').join('.')
+            : '';
+          const msg = err.msg || err.message || JSON.stringify(err);
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return String(err);
+      })
+      .filter(Boolean)
+      .join('; ');
+    if (formatted) return formatted;
+  }
+
+  // 2. If detail is a single object
+  if (typeof detail === 'object' && detail !== null) {
+    if (detail.msg) return String(detail.msg);
+    if (detail.message) return String(detail.message);
+    return JSON.stringify(detail);
+  }
+
+  // 3. If detail is a non-empty string
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim();
+  }
+
+  // 4. Check error.message (e.g., Network Error, timeout)
+  if (typeof error.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return fallback;
 };
 
 // ── Request interceptor — attach JWT token ─────────────────────────────────
@@ -52,17 +91,25 @@ api.interceptors.response.use(
 
 // ── Auth API ───────────────────────────────────────────────────────────────
 export const authAPI = {
+  /** Request passwordless OTP via Email or WhatsApp */
+  requestOtp: (email, role = 'buyer', channel = 'email', phone = null) =>
+    api.post('/auth/otp/request', { email, role, channel, phone }),
+
+  /** Verify OTP and authenticate */
+  verifyOtp: (email, otp, name = null, role = 'buyer') =>
+    api.post('/auth/otp/verify', { email, otp, name, role }),
+
   /** Register a new user */
-  register: (email, password, name, role = 'buyer', phone = null, flat_number = null) =>
-    api.post('/auth/register', { email, password, name, role, phone, flat_number }),
+  register: (email, password, name, role = 'buyer') =>
+    api.post('/auth/register', { email, password, name, role }),
 
   /** Login with email and password */
   login: (email, password) =>
     api.post('/auth/login', { email, password }),
 
   /** Refresh JWT */
-  refresh: (refresh_token) =>
-    api.post('/auth/refresh', { refresh_token }),
+  refresh: (refreshToken) =>
+    api.post('/auth/refresh', { refresh_token: refreshToken }),
 
   /** Get current authenticated user */
   me: () => api.get('/auth/me'),
@@ -70,6 +117,7 @@ export const authAPI = {
   /** Logout */
   logout: () => api.post('/auth/logout'),
 };
+
 
 // ── Sellers API ────────────────────────────────────────────────────────────
 export const sellersAPI = {
@@ -156,10 +204,10 @@ export const paymentsAPI = {
   initiate: (orderId) => api.post(`/payments/orders/${orderId}/initiate`),
 
   /** Capture payment with Razorpay signature */
-  capture: (orderId, paymentId, signature) =>
+  capture: (orderId, providerPaymentId, providerSignature) =>
     api.post(`/payments/orders/${orderId}/capture`, {
-      payment_id: paymentId,
-      signature: signature,
+      provider_payment_id: providerPaymentId,
+      provider_signature: providerSignature,
     }),
 
   /** Get current seller's ledger balance */
@@ -176,22 +224,41 @@ export const deliveryAPI = {
   get: (orderId) => api.get(`/deliveries/orders/${orderId}`),
 
   /** Initiate delivery (seller) */
-  create: (data) => api.post('/deliveries/', data),
+  create: (orderId, estimatedMinutes = 15, notes = null) =>
+    api.post(`/deliveries/orders/${orderId}`, {
+      estimated_minutes: estimatedMinutes,
+      notes: notes,
+    }),
+
+  /** Update delivery status (seller) */
+  updateStatus: (deliveryId, newStatus, notes = null) =>
+    api.patch(`/deliveries/${deliveryId}/status`, {
+      new_status: newStatus,
+      notes: notes,
+    }),
 
   /** Dispatch delivery (en route to flat) */
-  dispatch: (deliveryId) => api.patch(`/deliveries/${deliveryId}/dispatch`),
+  dispatch: (deliveryId, notes = null) =>
+    api.patch(`/deliveries/${deliveryId}/status`, {
+      new_status: 'dispatched',
+      notes: notes,
+    }),
 
   /** Mark delivery completed at flat door */
-  deliver: (deliveryId) => api.patch(`/deliveries/${deliveryId}/deliver`),
+  deliver: (deliveryId, notes = null) =>
+    api.patch(`/deliveries/${deliveryId}/status`, {
+      new_status: 'delivered',
+      notes: notes,
+    }),
 };
 
 // ── Ratings API ────────────────────────────────────────────────────────────
 export const ratingsAPI = {
   /** Rate a completed order */
-  create: (orderId, rating, comment = null) =>
+  create: (orderId, score, reviewText = null) =>
     api.post(`/ratings/orders/${orderId}`, {
-      rating,
-      comment,
+      score: parseInt(score, 10),
+      review_text: reviewText || null,
     }),
 
   /** Get seller ratings */
@@ -215,5 +282,4 @@ export const aiAPI = {
 };
 
 export default api;
-
 

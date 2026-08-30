@@ -19,7 +19,6 @@ from app.api.v1 import (
     ratings,
     sellers,
     suggestions,
-    ai,
 )
 
 router = APIRouter()
@@ -35,6 +34,4 @@ router.include_router(payments.router)
 router.include_router(payouts.router)
 router.include_router(delivery.router)
 router.include_router(suggestions.router)
-router.include_router(ai.router)
-
 

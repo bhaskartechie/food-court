@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import PropTypes from 'prop-types';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -10,6 +9,7 @@ import {
   CardActions,
   Button,
   Chip,
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,6 +20,7 @@ import {
   Alert,
   Tabs,
   Tab,
+  Badge,
 } from '@mui/material';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -56,7 +57,7 @@ export default function SuggestionsBoard({ currentUser }) {
 
   const isSeller = currentUser?.role === 'seller' || currentUser?.role === 'admin';
 
-  const fetchSuggestions = useCallback(async () => {
+  const fetchSuggestions = async () => {
     try {
       setLoading(true);
       const cat = categoryFilter === 'all' ? null : categoryFilter;
@@ -67,12 +68,11 @@ export default function SuggestionsBoard({ currentUser }) {
     } finally {
       setLoading(false);
     }
-  }, [categoryFilter]);
+  };
 
   useEffect(() => {
     fetchSuggestions();
-  }, [fetchSuggestions]);
-
+  }, [categoryFilter]);
 
   const handleUpvote = async (id) => {
     try {
@@ -480,13 +480,3 @@ export default function SuggestionsBoard({ currentUser }) {
     </Container>
   );
 }
-
-SuggestionsBoard.propTypes = {
-  currentUser: PropTypes.shape({
-    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    name: PropTypes.string,
-    email: PropTypes.string,
-    role: PropTypes.string,
-  }),
-};
-

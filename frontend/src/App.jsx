@@ -32,6 +32,8 @@ import {
   Paper,
   Badge,
   IconButton,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import StoreIcon from '@mui/icons-material/Store';
@@ -183,30 +185,34 @@ function LoginPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
 
-  const [step, setStep] = useState('email'); // 'email' | 'otp'
+  const [tab, setTab] = useState(0); // 0: OTP Login, 1: Password Login, 2: Register
+  const [otpStep, setOtpStep] = useState('email'); // 'email' | 'otp'
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [role, setRole] = useState(params.get('role') || 'buyer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
+  // ── 1. Passwordless OTP Authentication Flow ──────────────────────────────
   const handleRequestOTP = async (e) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setLoading(true);
     try {
-      const res = await authAPI.register(email, role);
-      // Dev mode: OTP may be returned in response for easy testing
+      const res = await authAPI.requestOtp(email, role, 'email');
       const devOtp = res.data?.dev_otp;
       setInfo(
         devOtp
-          ? `OTP sent! (Dev mode: your OTP is ${devOtp})`
-          : 'OTP sent to your email. Check your inbox.'
+          ? `Verification code sent to ${email}! (Dev mode code: ${devOtp})`
+          : `Verification code sent to ${email}. Please check your inbox.`
       );
-      setStep('otp');
+      setOtpStep('otp');
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to send OTP. Please try again.'));
+      setError(getErrorMessage(err, 'Failed to send verification code. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -217,15 +223,53 @@ function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await authAPI.login(email, otp);
+      const res = await authAPI.verifyOtp(email, otp, name, role);
       const { access_token, user: userData } = res.data;
       login(userData || { email, role }, access_token);
-      const next = params.get('next') || '/';
-      // Sanitize `next` to avoid open-redirects: allow only relative paths
+      const next = params.get('next') || (userData?.role === 'seller' ? '/seller-dashboard' : '/');
       const safeNext = next && next.startsWith('/') ? next : '/';
       navigate(safeNext);
     } catch (err) {
-      setError(getErrorMessage(err, 'Invalid OTP. Please try again.'));
+      setError(getErrorMessage(err, 'Invalid or expired code. Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 2. Password Login Flow ───────────────────────────────────────────────
+  const handlePasswordLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await authAPI.login(email, password);
+      const { access_token, user: userData } = res.data;
+      login(userData || { email, role }, access_token);
+      const next = params.get('next') || (userData?.role === 'seller' ? '/seller-dashboard' : '/');
+      const safeNext = next && next.startsWith('/') ? next : '/';
+      navigate(safeNext);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Invalid email or password. Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 3. Register Flow ─────────────────────────────────────────────────────
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    setLoading(true);
+    try {
+      await authAPI.register(email, password, name, role);
+      const loginRes = await authAPI.login(email, password);
+      const { access_token, user: userData } = loginRes.data;
+      login(userData || { email, name, role }, access_token);
+      const next = role === 'seller' ? '/seller-dashboard' : '/';
+      navigate(next);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to create account. Please check your information.'));
     } finally {
       setLoading(false);
     }
@@ -239,22 +283,140 @@ function LoginPage() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'radial-gradient(circle at 50% 30%, rgba(255,107,53,0.08), transparent 60%)',
+        p: 2,
       }}
     >
-      <Paper elevation={0} sx={{ p: 4, maxWidth: 420, width: '100%', border: '1px solid rgba(255,107,53,0.2)', borderRadius: 3 }}>
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: 4,
+          maxWidth: 460,
+          width: '100%',
+          border: '1px solid rgba(255,107,53,0.2)',
+          borderRadius: 3,
+          bgcolor: '#191928',
+          color: '#fff',
+        }}
+      >
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
           <RestaurantIcon sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
-          <Typography variant="h5" gutterBottom>Welcome Back</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {step === 'email' ? 'Enter your email to get started' : `Enter the OTP sent to ${email}`}
+          <Typography variant="h5" fontWeight="bold">
+            {tab === 0 ? 'Instant Login' : tab === 1 ? 'Welcome Back' : 'Join Society Food'}
           </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {tab === 0
+              ? 'Passwordless sign in with verification code'
+              : tab === 1
+              ? 'Sign in with your email & password'
+              : 'Connect with home cooks and neighbors'}
+          </Typography>
+        </Box>
+
+        {/* Tab Toggle */}
+        <Box sx={{ borderBottom: 1, borderColor: 'rgba(255,255,255,0.1)', mb: 3 }}>
+          <Tabs
+            value={tab}
+            onChange={(_, val) => {
+              setTab(val);
+              setOtpStep('email');
+              setError('');
+              setInfo('');
+            }}
+            variant="fullWidth"
+            textColor="inherit"
+            indicatorColor="primary"
+          >
+            <Tab label="✨ Instant OTP" sx={{ fontWeight: 'bold', textTransform: 'none' }} />
+            <Tab label="🔑 Password" sx={{ fontWeight: 'bold', textTransform: 'none' }} />
+            <Tab label="📝 Register" sx={{ fontWeight: 'bold', textTransform: 'none' }} />
+          </Tabs>
         </Box>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {info && <Alert severity="info" sx={{ mb: 2 }}>{info}</Alert>}
 
-        {step === 'email' ? (
-          <Box component="form" onSubmit={handleRequestOTP}>
+        {tab === 0 ? (
+          /* Instant OTP Flow */
+          otpStep === 'email' ? (
+            <Box component="form" onSubmit={handleRequestOTP}>
+              <TextField
+                label="Email Address"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                fullWidth
+                required
+                sx={{ mb: 2 }}
+                placeholder="you@example.com"
+              />
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                I am signing in as:
+              </Typography>
+              <Box sx={{ mb: 3, display: 'flex', gap: 1.5 }}>
+                {['buyer', 'seller'].map((r) => (
+                  <Button
+                    key={r}
+                    variant={role === r ? 'contained' : 'outlined'}
+                    color="primary"
+                    onClick={() => setRole(r)}
+                    sx={{ flex: 1, py: 1, fontWeight: 'bold' }}
+                  >
+                    {r === 'buyer' ? '🛒 Resident Buyer' : '🍳 Home Chef'}
+                  </Button>
+                ))}
+              </Box>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading}
+                startIcon={loading ? <CircularProgress size={18} /> : null}
+                sx={{ bgcolor: '#E05A2B', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
+              >
+                {loading ? 'Sending Code...' : 'Send Verification Code'}
+              </Button>
+            </Box>
+          ) : (
+            <Box component="form" onSubmit={handleVerifyOTP}>
+              <TextField
+                label="6-Digit Verification Code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                fullWidth
+                required
+                inputProps={{ maxLength: 6, style: { textAlign: 'center', letterSpacing: '6px', fontSize: '20px', fontWeight: 'bold' } }}
+                placeholder="123456"
+                sx={{ mb: 3 }}
+              />
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading}
+                startIcon={loading ? <CircularProgress size={18} /> : null}
+                sx={{ bgcolor: '#E05A2B', fontWeight: 'bold', mb: 1.5, '&:hover': { bgcolor: '#c9481c' } }}
+              >
+                {loading ? 'Verifying...' : 'Verify Code & Sign In'}
+              </Button>
+              <Button
+                variant="text"
+                fullWidth
+                onClick={() => {
+                  setOtpStep('email');
+                  setOtp('');
+                  setError('');
+                }}
+                sx={{ color: 'text.secondary', textTransform: 'none' }}
+              >
+                ← Change Email or Resend
+              </Button>
+            </Box>
+          )
+        ) : tab === 1 ? (
+          /* Password Login Form */
+          <Box component="form" onSubmit={handlePasswordLogin}>
             <TextField
               label="Email Address"
               type="email"
@@ -265,17 +427,74 @@ function LoginPage() {
               sx={{ mb: 2 }}
               placeholder="you@example.com"
             />
-            <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              fullWidth
+              required
+              sx={{ mb: 3 }}
+              placeholder="••••••••"
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              size="large"
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={18} /> : null}
+              sx={{ bgcolor: '#E05A2B', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </Box>
+        ) : (
+          /* Create Account Form */
+          <Box component="form" onSubmit={handleRegister}>
+            <TextField
+              label="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              required
+              sx={{ mb: 2 }}
+              placeholder="e.g. Meera Sharma"
+            />
+            <TextField
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              fullWidth
+              required
+              sx={{ mb: 2 }}
+              placeholder="you@example.com"
+            />
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              fullWidth
+              required
+              helperText="Minimum 8 characters"
+              sx={{ mb: 2 }}
+              placeholder="••••••••"
+            />
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              I want to use Society Food as:
+            </Typography>
+            <Box sx={{ mb: 3, display: 'flex', gap: 1.5 }}>
               {['buyer', 'seller'].map((r) => (
                 <Button
                   key={r}
                   variant={role === r ? 'contained' : 'outlined'}
                   color="primary"
                   onClick={() => setRole(r)}
-                  sx={{ flex: 1 }}
-                  size="small"
+                  sx={{ flex: 1, py: 1, fontWeight: 'bold' }}
                 >
-                  {r === 'buyer' ? '🛒 Buyer' : '🍳 Seller'}
+                  {r === 'buyer' ? '🛒 Resident Buyer' : '🍳 Home Chef'}
                 </Button>
               ))}
             </Box>
@@ -283,36 +502,12 @@ function LoginPage() {
               type="submit"
               variant="contained"
               fullWidth
+              size="large"
               disabled={loading}
               startIcon={loading ? <CircularProgress size={18} /> : null}
+              sx={{ bgcolor: '#E05A2B', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
             >
-              {loading ? 'Sending OTP...' : 'Send OTP'}
-            </Button>
-          </Box>
-        ) : (
-          <Box component="form" onSubmit={handleVerifyOTP}>
-            <TextField
-              label="6-digit OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              fullWidth
-              required
-              sx={{ mb: 2 }}
-              inputProps={{ maxLength: 6 }}
-              placeholder="123456"
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={18} /> : null}
-              sx={{ mb: 1 }}
-            >
-              {loading ? 'Verifying...' : 'Verify OTP & Login'}
-            </Button>
-            <Button variant="text" fullWidth onClick={() => { setStep('email'); setInfo(''); setError(''); }}>
-              ← Back
+              {loading ? 'Creating Account...' : 'Create Account & Start'}
             </Button>
           </Box>
         )}
@@ -320,6 +515,8 @@ function LoginPage() {
     </Box>
   );
 }
+
+
 
 // ── Sellers Listing Page ─────────────────────────────────────────────────────
 function SellersPage() {

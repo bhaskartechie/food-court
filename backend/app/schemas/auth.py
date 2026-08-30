@@ -70,3 +70,42 @@ class RefreshResponse(BaseModel):
     """Response for a successful token refresh."""
     access_token: str
     token_type: str = "bearer"
+
+
+class OTPRequest(BaseModel):
+    """Request body for requesting an OTP."""
+    email: EmailStr
+    role: str = "buyer"
+    channel: str = "email"  # "email" | "whatsapp"
+    phone: str | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"Role must be one of: {', '.join(sorted(VALID_ROLES))}")
+        return v
+
+
+class OTPVerifyRequest(BaseModel):
+    """Request body for verifying an OTP and logging in."""
+    email: EmailStr
+    otp: str
+    name: str | None = None
+    role: str = "buyer"
+
+    @field_validator("otp")
+    @classmethod
+    def validate_otp(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 4 or len(cleaned) > 10:
+            raise ValueError("OTP must be between 4 and 10 digits")
+        return cleaned
+
+
+class OTPRequestResponse(BaseModel):
+    """Response body after requesting an OTP."""
+    message: str
+    expires_in_minutes: int
+    dev_otp: str | None = None
+
