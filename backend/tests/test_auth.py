@@ -38,3 +38,28 @@ def test_change_password(client: TestClient, buyer_headers: dict):
     )
     assert response.status_code == 200
     assert response.json()["message"] == "Password changed successfully."
+
+
+def test_login_user_with_role_switch(client: TestClient, db: Session, test_buyer: User):
+    """User registered as buyer logs in and requests seller role."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "buyer@test.com", "password": "password123", "role": "seller"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["role"] == "seller"
+
+
+def test_switch_role_endpoint(client: TestClient, buyer_headers: dict):
+    """Authenticated user switches active persona."""
+    response = client.post(
+        "/api/v1/auth/switch-role",
+        json={"target_role": "seller"},
+        headers=buyer_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["role"] == "seller"
+    assert "access_token" in data
+

@@ -104,8 +104,12 @@ export const authAPI = {
     api.post('/auth/register', { email, password, name, role }),
 
   /** Login with email and password */
-  login: (email, password) =>
-    api.post('/auth/login', { email, password }),
+  login: (email, password, role = null) =>
+    api.post('/auth/login', { email, password, ...(role ? { role } : {}) }),
+
+  /** Switch active role between buyer and seller */
+  switchRole: (targetRole = null) =>
+    api.post('/auth/switch-role', { target_role: targetRole }),
 
   /** Refresh JWT */
   refresh: (refreshToken) =>
@@ -117,6 +121,7 @@ export const authAPI = {
   /** Logout */
   logout: () => api.post('/auth/logout'),
 };
+
 
 
 // ── Sellers API ────────────────────────────────────────────────────────────
@@ -153,13 +158,24 @@ export const menusAPI = {
   /** Update a menu item */
   update: (menuId, data) => api.put(`/menus/${menuId}`, data),
 
-  /** Toggle item availability */
-  toggleAvailability: (menuId, isAvailable) =>
-    api.patch(`/menus/${menuId}/availability`, { is_available: isAvailable }),
+  /** Toggle item availability and optional portion count */
+  toggleAvailability: (menuId, isAvailable, quantity = null) =>
+    api.patch(`/menus/${menuId}/availability`, {
+      is_available: isAvailable,
+      ...(quantity !== null ? { quantity } : {}),
+    }),
+
+  /** Update portion count directly */
+  updatePortions: (menuId, quantity) =>
+    api.patch(`/menus/${menuId}/availability`, {
+      is_available: quantity > 0,
+      quantity,
+    }),
 
   /** Delete a menu item */
   delete: (menuId) => api.delete(`/menus/${menuId}`),
 };
+
 
 // ── Orders API ─────────────────────────────────────────────────────────────
 export const ordersAPI = {

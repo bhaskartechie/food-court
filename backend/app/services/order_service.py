@@ -22,11 +22,20 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
     """
     Place a new order for a buyer.
 
-    Validates all menu items belong to the specified seller and are available.
-    Decrements Menu.quantity for items with finite stock and auto-marks items
-    unavailable when stock reaches zero.
+    Validates:
+    - Buyer cannot place an order from their own kitchen (self-ordering prevention).
+    - All menu items belong to the specified seller and are available.
+    - Decrements Menu.quantity for items with finite stock and auto-marks items
+      unavailable when stock reaches zero.
     """
+    if buyer_id == request.seller_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chefs cannot place orders from their own kitchen.",
+        )
+
     menu_ids = [item.menu_id for item in request.items]
+
     db_items = (
         db.query(Menu)
         .filter(

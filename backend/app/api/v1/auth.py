@@ -86,8 +86,31 @@ async def login(request: LoginRequest, db: Session = DB_DEPENDENCY):
     """
     user = auth_service.authenticate_user(db, str(request.email), request.password)
 
+    # If the user explicitly selects a role upon login, update active role
+    if request.role and request.role in ("buyer", "seller") and user.role != request.role:
+        from app.db.models.enums import ApprovalStatus, UserRole
+        from app.db.models.seller import SellerProfile
+        user.role = UserRole(request.role)
+        if user.role == UserRole.seller:
+            existing_profile = db.query(SellerProfile).filter(SellerProfile.id == user.id).first()
+            if not existing_profile:
+                new_profile = SellerProfile(
+                    id=user.id,
+                    is_open=True,
+                    approval_status=ApprovalStatus.approved,
+                    rating=0.0,
+                    review_count=0,
+                    on_time_delivery_rate=100.0,
+                    avg_delivery_minutes=25,
+                )
+                db.add(new_profile)
+        db.commit()
+        db.refresh(user)
+
+
     access_token = create_access_token(user.id, user.role)
     refresh_token = create_refresh_token(user.id, user.role)
+
 
     logger.info("User logged in: %s (role=%s)", user.email, user.role)
 
@@ -150,6 +173,66 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "is_verified": current_user.is_verified,
         "is_active": current_user.is_active,
     }
+
+
+@router.post("/switch-role", response_model=TokenResponse)
+async def switch_role(
+    target_role: str | None = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Switch active role between buyer and seller for the current authenticated user.
+    Auto-provisions a SellerProfile if switching to seller for the first time.
+    Re-issues access & refresh tokens with the new role.
+    """
+    from app.db.models.enums import UserRole
+    from app.db.models.seller import SellerProfile
+
+    desired_role = target_role if target_role in ("buyer", "seller") else (
+        "buyer" if current_user.role == "seller" else "seller"
+    )
+
+    current_user.role = UserRole(desired_role)
+    if current_user.role == UserRole.seller:
+        from app.db.models.enums import ApprovalStatus
+        existing_profile = db.query(SellerProfile).filter(SellerProfile.id == current_user.id).first()
+        if not existing_profile:
+            new_profile = SellerProfile(
+                id=current_user.id,
+                is_open=True,
+                approval_status=ApprovalStatus.approved,
+                rating=0.0,
+                review_count=0,
+                on_time_delivery_rate=100.0,
+                avg_delivery_minutes=25,
+            )
+            db.add(new_profile)
+
+    db.commit()
+    db.refresh(current_user)
+
+
+    access_token = create_access_token(current_user.id, current_user.role)
+    refresh_token = create_refresh_token(current_user.id, current_user.role)
+
+    logger.info("User switched active role: %s (new_role=%s)", current_user.email, current_user.role)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserInfo(
+            id=current_user.id,
+            email=current_user.email,
+            name=current_user.name,
+            role=current_user.role,
+            flat_number=current_user.flat_number,
+            verification_status=current_user.verification_status,
+            is_verified=current_user.is_verified,
+        ),
+    )
+
 
 
 @router.post("/logout")
@@ -259,7 +342,30 @@ async def verify_otp_route(
         role=request.role,
     )
 
+    # If the resident selected a role (e.g. buyer or seller) upon OTP verification, adopt active role
+    if request.role and request.role in ("buyer", "seller") and user.role != request.role:
+        from app.db.models.enums import ApprovalStatus, UserRole
+        from app.db.models.seller import SellerProfile
+        user.role = UserRole(request.role)
+        if user.role == UserRole.seller:
+            existing_profile = db.query(SellerProfile).filter(SellerProfile.id == user.id).first()
+            if not existing_profile:
+                new_profile = SellerProfile(
+                    id=user.id,
+                    is_open=True,
+                    approval_status=ApprovalStatus.approved,
+                    rating=0.0,
+                    review_count=0,
+                    on_time_delivery_rate=100.0,
+                    avg_delivery_minutes=25,
+                )
+                db.add(new_profile)
+        db.commit()
+        db.refresh(user)
+
+
     if not user.is_active:
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account has been deactivated. Please contact support.",

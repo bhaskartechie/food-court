@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import {
   Container,
   Typography,
@@ -21,6 +22,8 @@ import {
   TextField,
   MenuItem,
   Divider,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -28,6 +31,10 @@ import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import {
   ordersAPI,
   sellersAPI,
@@ -48,6 +55,7 @@ const SLOT_LABELS = {
 export default function SellerDashboardPage({ currentUser }) {
   const [sellerProfile, setSellerProfile] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [balance, setBalance] = useState({ current_balance: 0, total_earned: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,6 +67,8 @@ export default function SellerDashboardPage({ currentUser }) {
   const [menuPrice, setMenuPrice] = useState(120);
   const [menuCat, setMenuCat] = useState('veg');
   const [menuDesc, setMenuDesc] = useState('');
+  const [menuPortions, setMenuPortions] = useState(15);
+  const [menuImageUrl, setMenuImageUrl] = useState('');
   const [isPreorder, setIsPreorder] = useState(true);
   const [cutoffTime, setCutoffTime] = useState('11:00');
   const [maxBatch, setMaxBatch] = useState(15);
@@ -67,15 +77,20 @@ export default function SellerDashboardPage({ currentUser }) {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [profRes, ordersRes, balRes] = await Promise.all([
+      const sellerId = currentUser?.id;
+      const [profRes, ordersRes, balRes, menusRes] = await Promise.all([
         sellersAPI.getMe().catch(() => ({ data: null })),
         ordersAPI.list(0, 50).catch(() => ({ data: { orders: [] } })),
         paymentsAPI.getBalance().catch(() => ({ data: { current_balance: 0, total_earned: 0 } })),
+        sellerId
+          ? menusAPI.bySeller(sellerId, null, null, false).catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
       ]);
 
       if (profRes.data) setSellerProfile(profRes.data);
       setOrders(ordersRes.data.orders || []);
       setBalance(balRes.data || { current_balance: 0, total_earned: 0 });
+      setMenuItems(Array.isArray(menusRes.data) ? menusRes.data : []);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load seller dashboard.'));
     } finally {
@@ -85,7 +100,7 @@ export default function SellerDashboardPage({ currentUser }) {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [currentUser?.id]);
 
   const handleToggleStoreOpen = async (event) => {
     const newStatus = event.target.checked;
@@ -116,30 +131,92 @@ export default function SellerDashboardPage({ currentUser }) {
     }
   };
 
+  // ── Dynamic Portions & Availability Handlers ────────────────────────────────
+  const handleToggleDishAvailability = async (menuId, currentAvailable, currentQty) => {
+    const targetAvailable = !currentAvailable;
+    const targetQty = targetAvailable ? (currentQty > 0 ? currentQty : 10) : 0;
+    try {
+      await menusAPI.toggleAvailability(menuId, targetAvailable, targetQty);
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === menuId
+            ? { ...item, is_available: targetAvailable, quantity: targetQty }
+            : item
+        )
+      );
+      setActionSuccess(
+        `Dish marked as ${targetAvailable ? `AVAILABLE 🟢 (${targetQty} portions)` : 'SOLD OUT 🔴 (0 portions)'}`
+      );
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update dish availability.'));
+    }
+  };
+
+  const handleAdjustPortions = async (menuId, currentQty, delta) => {
+    const nextQty = Math.max(0, (currentQty || 0) + delta);
+    const nextAvailable = nextQty > 0;
+    try {
+      await menusAPI.updatePortions(menuId, nextQty);
+      setMenuItems((prev) =>
+        prev.map((item) =>
+          item.id === menuId
+            ? { ...item, quantity: nextQty, is_available: nextAvailable }
+            : item
+        )
+      );
+      if (nextQty === 0) {
+        setActionSuccess(`Portions reached 0 — Dish auto-marked SOLD OUT 🔴`);
+      } else {
+        setActionSuccess(`Updated portion count to ${nextQty} portions (🟢 In Stock)`);
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to adjust dish portions.'));
+    }
+  };
+
+  const handleDeleteDish = async (menuId, dishName) => {
+    if (!window.confirm(`Are you sure you want to remove '${dishName}' from your menu?`)) return;
+    try {
+      await menusAPI.delete(menuId);
+      setMenuItems((prev) => prev.filter((item) => item.id !== menuId));
+      setActionSuccess(`'${dishName}' removed from kitchen menu.`);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete menu item.'));
+    }
+  };
+
   const handleCreateMenuSubmit = async () => {
     if (!menuName.trim()) return;
     try {
       setSubmittingMenu(true);
+      const portionsVal = parseInt(menuPortions, 10) || 15;
       await menusAPI.create({
         name: menuName,
         price: parseFloat(menuPrice),
         category: menuCat,
         description: menuDesc || undefined,
+        quantity: portionsVal,
+        is_available: portionsVal > 0,
+        image_url: menuImageUrl || undefined,
         is_preorder_only: isPreorder,
         preorder_cutoff_time: isPreorder ? cutoffTime : undefined,
         available_slots: isPreorder ? ['lunch_today', 'dinner_today'] : undefined,
-        max_batch_quantity: isPreorder ? parseInt(maxBatch, 10) : 0,
+        max_batch_quantity: isPreorder ? (parseInt(maxBatch, 10) || portionsVal) : portionsVal,
       });
       setOpenNewMenu(false);
       setMenuName('');
       setMenuDesc('');
+      setMenuImageUrl('');
+      setMenuPortions(15);
       setActionSuccess('Menu item / Pre-order batch created successfully!');
+      fetchDashboardData();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to create menu item.'));
     } finally {
       setSubmittingMenu(false);
     }
   };
+
 
   // Compute batch counts per slot
   const preorders = orders.filter((o) => o.is_preorder && o.status !== 'cancelled');
@@ -321,6 +398,203 @@ export default function SellerDashboardPage({ currentUser }) {
         </Grid>
       </Grid>
 
+      {/* Live Kitchen Menu & Dishes Management Section */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} mt={5}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <RestaurantIcon sx={{ color: '#E05A2B' }} />
+          <Typography variant="h5" fontWeight="bold">
+            Kitchen Menu & Active Dishes ({menuItems.length})
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<AddCircleOutlineIcon />}
+          onClick={() => setOpenNewMenu(true)}
+          sx={{
+            bgcolor: '#E05A2B',
+            fontWeight: 'bold',
+            borderRadius: 2,
+            textTransform: 'none',
+            '&:hover': { bgcolor: '#c9481c' },
+          }}
+        >
+          + Add New Dish
+        </Button>
+      </Box>
+
+      {menuItems.length === 0 ? (
+        <Box textAlign="center" py={5} mb={4} color="text.secondary" bgcolor="#191928" borderRadius={3} border="1px dashed rgba(255,255,255,0.12)">
+          <Typography variant="body1" mb={1}>No dishes published from your kitchen yet.</Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+            Add today's home-cooked specials or scheduled pre-order batches for society neighbors.
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<AddCircleOutlineIcon />}
+            onClick={() => setOpenNewMenu(true)}
+            sx={{ color: '#E05A2B', borderColor: '#E05A2B', textTransform: 'none' }}
+          >
+            Create Your First Dish
+          </Button>
+        </Box>
+      ) : (
+        <Grid container spacing={2.5} mb={5}>
+          {menuItems.map((dish) => {
+            const isSoldOut = !dish.is_available || (dish.quantity !== undefined && dish.quantity <= 0);
+            const catColors = {
+              veg: '#2EC4B6',
+              'non-veg': '#E05A2B',
+              snacks: '#F6BD60',
+              desserts: '#FF6B6B',
+              beverages: '#4D96FF',
+            };
+            const catColor = catColors[dish.category] || '#E05A2B';
+
+            return (
+              <Grid item xs={12} sm={6} md={4} key={dish.id}>
+                <Card
+                  sx={{
+                    bgcolor: '#191928',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: isSoldOut ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
+                    opacity: isSoldOut ? 0.8 : 1,
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100%',
+                  }}
+                >
+                  <CardContent sx={{ flexGrow: 1, p: 2.5 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+                      <Chip
+                        label={dish.category?.toUpperCase() || 'DISH'}
+                        size="small"
+                        sx={{
+                          bgcolor: `${catColor}22`,
+                          color: catColor,
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                          height: 22,
+                        }}
+                      />
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Typography variant="h6" fontWeight="bold" color="#E05A2B">
+                          ₹{dish.price}
+                        </Typography>
+                        <Tooltip title="Delete dish from kitchen menu">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteDish(dish.id, dish.name)}
+                            sx={{ color: '#aaa', '&:hover': { color: '#ff5252' } }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+
+                    <Typography variant="subtitle1" fontWeight="bold" color="#fff" mb={0.5}>
+                      {dish.name}
+                    </Typography>
+
+                    {dish.description && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{
+                          mb: 1.5,
+                          fontSize: '0.82rem',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {dish.description}
+                      </Typography>
+                    )}
+
+                    {dish.is_preorder_only && (
+                      <Box display="flex" alignItems="center" gap={0.8} mb={1.5}>
+                        <AccessTimeIcon sx={{ color: '#F6BD60', fontSize: 16 }} />
+                        <Typography variant="caption" color="#F6BD60">
+                          Pre-Order Cutoff: {dish.preorder_cutoff_time || '11:00 AM'}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    <Divider sx={{ borderColor: 'rgba(255,255,255,0.06)', my: 1.5 }} />
+
+                    {/* Dynamic Portion Availability & Stepper Controls */}
+                    <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Portions Available:
+                        </Typography>
+                        <Box display="flex" alignItems="center" gap={0.8} mt={0.5}>
+                          <IconButton
+                            size="small"
+                            disabled={!dish.quantity || dish.quantity <= 0}
+                            onClick={() => handleAdjustPortions(dish.id, dish.quantity, -1)}
+                            sx={{
+                              bgcolor: 'rgba(255,255,255,0.08)',
+                              color: '#fff',
+                              p: 0.5,
+                              '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' },
+                            }}
+                          >
+                            <RemoveIcon fontSize="small" />
+                          </IconButton>
+
+                          <Typography variant="body2" fontWeight="bold" color={isSoldOut ? '#ff5252' : '#2EC4B6'} sx={{ minWidth: 24, textAlign: 'center' }}>
+                            {dish.quantity ?? 0}
+                          </Typography>
+
+                          <IconButton
+                            size="small"
+                            onClick={() => handleAdjustPortions(dish.id, dish.quantity, 1)}
+                            sx={{
+                              bgcolor: 'rgba(255,255,255,0.08)',
+                              color: '#fff',
+                              p: 0.5,
+                              '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' },
+                            }}
+                          >
+                            <AddIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </Box>
+
+                      {/* Real-Time Availability Switch */}
+                      <Box textAlign="right">
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={Boolean(dish.is_available && (dish.quantity === undefined || dish.quantity > 0))}
+                              onChange={() => handleToggleDishAvailability(dish.id, dish.is_available, dish.quantity)}
+                              color="success"
+                            />
+                          }
+                          label={
+                            <Typography variant="caption" fontWeight="bold" color={!isSoldOut ? '#2EC4B6' : '#ff5252'}>
+                              {!isSoldOut ? 'IN STOCK 🟢' : 'SOLD OUT 🔴'}
+                            </Typography>
+                          }
+                        />
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
+
       {/* Orders Board */}
       <Typography variant="h5" fontWeight="bold" mb={2}>
         Live Kitchen Orders ({orders.length})
@@ -468,6 +742,16 @@ export default function SellerDashboardPage({ currentUser }) {
 
           <TextField
             fullWidth
+            type="number"
+            label="Available Portions / Portions in Batch"
+            value={menuPortions}
+            onChange={(e) => setMenuPortions(e.target.value)}
+            margin="dense"
+            sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
+          />
+
+          <TextField
+            fullWidth
             label="Category"
             select
             value={menuCat}
@@ -475,7 +759,7 @@ export default function SellerDashboardPage({ currentUser }) {
             margin="dense"
             sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
           >
-            {['veg', 'non-veg', 'snacks', 'desserts'].map((c) => (
+            {['veg', 'non-veg', 'snacks', 'desserts', 'beverages'].map((c) => (
               <MenuItem key={c} value={c}>
                 {c.toUpperCase()}
               </MenuItem>
@@ -489,6 +773,16 @@ export default function SellerDashboardPage({ currentUser }) {
             label="Description"
             value={menuDesc}
             onChange={(e) => setMenuDesc(e.target.value)}
+            margin="dense"
+            sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
+          />
+
+          <TextField
+            fullWidth
+            label="Photo URL (Optional)"
+            placeholder="https://images.unsplash.com/..."
+            value={menuImageUrl}
+            onChange={(e) => setMenuImageUrl(e.target.value)}
             margin="dense"
             sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
           />
@@ -544,4 +838,14 @@ export default function SellerDashboardPage({ currentUser }) {
     </Container>
   );
 }
+
+SellerDashboardPage.propTypes = {
+  currentUser: PropTypes.shape({
+    id: PropTypes.number,
+    name: PropTypes.string,
+    email: PropTypes.string,
+    role: PropTypes.string,
+  }),
+};
+
 

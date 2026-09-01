@@ -15,6 +15,7 @@ class MenuCreateRequest(BaseModel):
     category: str  # "veg" | "non-veg" | "snacks" | "desserts" | "beverages" | "other"
     price: float
     is_available: bool = True
+    quantity: int = 0  # 0 = unlimited, > 0 = portion stock
     is_preorder_only: bool = False
     preorder_cutoff_time: str | None = None
     available_slots: list[str] | None = None
@@ -47,6 +48,7 @@ class MenuUpdateRequest(BaseModel):
     price: float | None = None
     category: str | None = None
     is_available: bool | None = None
+    quantity: int | None = None
     is_preorder_only: bool | None = None
     preorder_cutoff_time: str | None = None
     available_slots: list[str] | None = None
@@ -68,6 +70,7 @@ class AvailabilityRequest(BaseModel):
     """Request body for toggling menu item availability."""
 
     is_available: bool
+    quantity: Optional[int] = None
 
 
 class MenuItemResponse(BaseModel):
@@ -80,6 +83,7 @@ class MenuItemResponse(BaseModel):
     category: str
     price: float
     is_available: bool
+    quantity: int = 0
     is_preorder_only: bool = False
     preorder_cutoff_time: str | None = None
     available_slots: list[str] | None = None
@@ -88,4 +92,5 @@ class MenuItemResponse(BaseModel):
     image_url: str | None = None
 
     model_config = {"from_attributes": True}
+
 

@@ -14,12 +14,15 @@ import {
   CircularProgress,
   Alert,
   Divider,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
 import StoreIcon from '@mui/icons-material/Store';
+import SearchIcon from '@mui/icons-material/Search';
 import { ordersAPI, sellersAPI, suggestionsAPI, getErrorMessage } from '../services/api';
 
 
@@ -37,8 +40,10 @@ export default function BuyerDashboardPage({ currentUser }) {
   const [preorders, setPreorders] = useState([]);
   const [topSellers, setTopSellers] = useState([]);
   const [trendingCravings, setTrendingCravings] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -111,7 +116,56 @@ export default function BuyerDashboardPage({ currentUser }) {
         </Box>
       </Box>
 
+      {/* Quick Marketplace Search */}
+      <Box sx={{ mb: 4 }}>
+        <TextField
+          fullWidth
+          placeholder="Search home chefs, authentic dishes, or your favorite building specialties..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && searchQuery.trim()) {
+              navigate(`/sellers?search=${encodeURIComponent(searchQuery.trim())}`);
+            }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'rgba(255,255,255,0.5)' }} />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => {
+                    if (searchQuery.trim()) {
+                      navigate(`/sellers?search=${encodeURIComponent(searchQuery.trim())}`);
+                    }
+                  }}
+                  sx={{ bgcolor: '#E05A2B', textTransform: 'none', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
+                >
+                  Search Chefs
+                </Button>
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            bgcolor: '#191928',
+            borderRadius: 2,
+            '& .MuiOutlinedInput-root': {
+              color: '#fff',
+              '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
+              '&:hover fieldset': { borderColor: '#E05A2B' },
+              '&.Mui-focused fieldset': { borderColor: '#E05A2B' },
+            },
+          }}
+        />
+      </Box>
+
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
 
       {loading ? (
         <Box display="flex" justifyContent="center" py={6}>

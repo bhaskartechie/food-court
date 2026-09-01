@@ -101,12 +101,17 @@ async def toggle_availability(
     current_user: User = SELLER_OR_ADMIN_DEPENDENCY,
     db: Session = DB_DEPENDENCY,
 ):
-    """Toggle the availability of a menu item."""
+    """Toggle the availability and portion count of a menu item."""
     owner_id = current_user.id if current_user.role == "seller" else None
     item = menu_service.toggle_availability(
-        db, menu_id=menu_id, is_available=request.is_available, owner_id=owner_id
+        db,
+        menu_id=menu_id,
+        is_available=request.is_available,
+        quantity=request.quantity,
+        owner_id=owner_id,
     )
-    return {"id": item.id, "is_available": item.is_available}
+    return {"id": item.id, "is_available": item.is_available, "quantity": item.quantity}
+
 
 
 @router.post("/{menu_id}/image")

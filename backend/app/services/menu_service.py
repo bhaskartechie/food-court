@@ -96,6 +96,7 @@ def create_menu_item(
         category=request.category,
         price=request.price,
         is_available=request.is_available,
+        quantity=request.quantity if request.quantity is not None else 0,
         is_preorder_only=request.is_preorder_only,
         preorder_cutoff_time=request.preorder_cutoff_time,
         available_slots=request.available_slots,
@@ -140,6 +141,12 @@ def update_menu_item(
         item.category = request.category
     if request.is_available is not None:
         item.is_available = request.is_available
+    if request.quantity is not None:
+        item.quantity = max(0, request.quantity)
+        if request.quantity == 0 and request.is_available is None:
+            item.is_available = False
+        elif request.quantity > 0 and request.is_available is None and not item.is_available:
+            item.is_available = True
     if request.is_preorder_only is not None:
         item.is_preorder_only = request.is_preorder_only
     if request.preorder_cutoff_time is not None:
@@ -178,9 +185,13 @@ def delete_menu_item(db: Session, menu_id: int, owner_id: int | None = None) -> 
 
 
 def toggle_availability(
-    db: Session, menu_id: int, is_available: bool, owner_id: int | None = None
+    db: Session,
+    menu_id: int,
+    is_available: bool,
+    quantity: int | None = None,
+    owner_id: int | None = None,
 ) -> Menu:
-    """Toggle the is_available flag on a menu item."""
+    """Toggle the is_available flag and portions on a menu item."""
     item = db.query(Menu).filter(Menu.id == menu_id).first()
     if not item:
         raise HTTPException(
@@ -192,11 +203,19 @@ def toggle_availability(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not your menu item."
         )
 
-    item.is_available = is_available
+    if quantity is not None:
+        item.quantity = max(0, quantity)
+        item.is_available = is_available if (quantity > 0 or is_available) else False
+    else:
+        item.is_available = is_available
+        if is_available and item.quantity == 0:
+            item.quantity = 10  # replenish default stock if toggled on with 0 portions
+
     item.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(item)
     return item
+
 
 
 async def upload_menu_image(

@@ -40,6 +40,8 @@ class LoginRequest(BaseModel):
     """Request body for POST /api/v1/auth/login."""
     email: EmailStr
     password: str
+    role: Optional[str] = None
+
 
 
 class RefreshRequest(BaseModel):

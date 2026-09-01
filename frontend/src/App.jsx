@@ -34,12 +34,19 @@ import {
   IconButton,
   Tabs,
   Tab,
+  InputAdornment,
+  Popover,
 } from '@mui/material';
+
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import StoreIcon from '@mui/icons-material/Store';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
 import { authAPI, sellersAPI, getErrorMessage } from './services/api';
+
 import MenuPage from './pages/Menu';
 import OrdersPage from './pages/Orders';
 import ProfilePage from './pages/Profile';
@@ -80,6 +87,7 @@ const theme = createTheme({
 });
 
 // ── Auth Context ─────────────────────────────────────────────────────────────
+// ── Auth Context ─────────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
 
 function AuthProvider({ children }) {
@@ -103,8 +111,17 @@ function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const switchRole = async (targetRole) => {
+    const res = await authAPI.switchRole(targetRole);
+    const { access_token, user: updatedUser } = res.data;
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, switchRole }}>
       {children}
     </AuthContext.Provider>
   );
@@ -118,13 +135,27 @@ const useAuth = () => useContext(AuthContext);
 
 // ── Navigation Bar ───────────────────────────────────────────────────────────
 function Navbar({ cartCount, onOpenCart }) {
-  const { user, logout } = useAuth();
+  const { user, logout, switchRole } = useAuth();
   const navigate = useNavigate();
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
 
   const handleLogout = async () => {
     try { await authAPI.logout(); } catch (_) { /* ignore */ }
     logout();
     navigate('/login');
+  };
+
+  const handleSwitchRole = async (targetRole) => {
+    try {
+      const updated = await switchRole(targetRole);
+      if (updated.role === 'seller') {
+        navigate('/seller/dashboard');
+      } else {
+        navigate('/buyer');
+      }
+    } catch (err) {
+      console.error('Failed to switch role', err);
+    }
   };
 
   return (
@@ -135,47 +166,196 @@ function Navbar({ cartCount, onOpenCart }) {
           Society Food
         </Typography>
 
-        <Button component={Link} to="/suggestions" color="inherit" size="small" sx={{ mr: 1, color: '#F6BD60' }} startIcon={<LocalFireDepartmentIcon />}>
-          Cravings
-        </Button>
-
         {user ? (
           <>
-            {user.role === 'seller' || user.role === 'admin' ? (
-              <Button component={Link} to="/seller/dashboard" color="inherit" size="small" sx={{ mr: 1 }}>
-                Kitchen Hub
-              </Button>
+            {/* Seller Mode Navigation */}
+            {user.role === 'seller' ? (
+              <>
+                <Button component={Link} to="/seller/dashboard" color="inherit" size="small" sx={{ mr: 1 }}>
+                  Kitchen Hub
+                </Button>
+                <Button component={Link} to="/orders" color="inherit" size="small" sx={{ mr: 1 }}>
+                  Orders
+                </Button>
+                <Button component={Link} to="/suggestions" color="inherit" size="small" sx={{ mr: 1, color: '#F6BD60' }} startIcon={<LocalFireDepartmentIcon />}>
+                  Cravings
+                </Button>
+              </>
             ) : (
-              <Button component={Link} to="/buyer" color="inherit" size="small" sx={{ mr: 1 }}>
-                Dashboard
-              </Button>
+              /* Buyer Mode Navigation: Strictly Cravings, Orders, Cart */
+              <>
+                <Button component={Link} to="/suggestions" color="inherit" size="small" sx={{ mr: 1, color: '#F6BD60' }} startIcon={<LocalFireDepartmentIcon />}>
+                  Cravings
+                </Button>
+                <Button component={Link} to="/orders" color="inherit" size="small" sx={{ mr: 1 }}>
+                  Orders
+                </Button>
+              </>
             )}
-            <Button component={Link} to="/orders" color="inherit" size="small" sx={{ mr: 1 }}>
-              Orders
-            </Button>
+
+            {/* Cart Icon */}
             <IconButton onClick={onOpenCart} sx={{ color: '#fff', mr: 1.5 }}>
               <Badge badgeContent={cartCount} color="primary">
                 <ShoppingBagOutlinedIcon />
               </Badge>
             </IconButton>
+
+            {/* Instant Role Persona Switcher Button */}
+            <Button
+              size="small"
+              onClick={() => handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller')}
+              sx={{
+                mr: 1.5,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                bgcolor: user.role === 'seller' ? 'rgba(46,196,182,0.15)' : 'rgba(224,90,43,0.15)',
+                color: user.role === 'seller' ? '#2EC4B6' : '#E05A2B',
+                border: '1px solid',
+                borderColor: user.role === 'seller' ? 'rgba(46,196,182,0.3)' : 'rgba(224,90,43,0.3)',
+                '&:hover': {
+                  bgcolor: user.role === 'seller' ? 'rgba(46,196,182,0.25)' : 'rgba(224,90,43,0.25)',
+                },
+              }}
+            >
+              {user.role === 'seller' ? '🛒 Switch to Buyer Mode' : '🍳 Switch to Chef Mode'}
+            </Button>
+
+            {/* User Info Chip with Interactive Popover */}
             <Chip
+              avatar={
+                <Avatar sx={{ bgcolor: user.role === 'seller' ? '#2EC4B6' : '#E05A2B', color: '#fff', fontWeight: 'bold' }}>
+                  {user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
+                </Avatar>
+              }
               label={`${user.name || user.email?.split('@')[0]} (${user.role || 'buyer'})`}
               size="small"
-              sx={{ mr: 2, bgcolor: 'rgba(224,90,43,0.15)', color: 'primary.main', fontWeight: 'bold' }}
+              onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+              sx={{
+                mr: 1.5,
+                cursor: 'pointer',
+                bgcolor: 'rgba(224,90,43,0.15)',
+                color: 'primary.main',
+                fontWeight: 'bold',
+                '&:hover': { bgcolor: 'rgba(224,90,43,0.25)' },
+              }}
             />
+
+            {/* User Info Popover */}
+            <Popover
+              open={Boolean(userMenuAnchor)}
+              anchorEl={userMenuAnchor}
+              onClose={() => setUserMenuAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              PaperProps={{
+                sx: {
+                  p: 2.5,
+                  width: 290,
+                  bgcolor: '#191928',
+                  color: '#fff',
+                  borderRadius: 3,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                },
+              }}
+            >
+              <Box display="flex" alignItems="center" gap={1.5} mb={1.5}>
+                <Avatar sx={{ bgcolor: user.role === 'seller' ? '#2EC4B6' : '#E05A2B', width: 44, height: 44, fontWeight: 'bold' }}>
+                  {user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || 'U'}
+                </Avatar>
+                <Box sx={{ overflow: 'hidden' }}>
+                  <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                    {user.name || 'Society Resident'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap display="block">
+                    {user.email}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', my: 1.5 }} />
+
+              <Box display="flex" flexDirection="column" gap={1} mb={2}>
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">Active Mode:</Typography>
+                  <Chip
+                    size="small"
+                    label={user.role === 'seller' ? '🍳 Home Chef' : '🛒 Resident Buyer'}
+                    sx={{
+                      bgcolor: user.role === 'seller' ? 'rgba(46,196,182,0.15)' : 'rgba(224,90,43,0.15)',
+                      color: user.role === 'seller' ? '#2EC4B6' : '#E05A2B',
+                      fontWeight: 'bold',
+                      fontSize: '0.75rem',
+                    }}
+                  />
+                </Box>
+
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">Flat / Unit:</Typography>
+                  <Typography variant="caption" fontWeight="bold" color="#F6BD60">
+                    {user.flat_number ? `Flat #${user.flat_number}` : 'Society Resident'}
+                  </Typography>
+                </Box>
+
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">Status:</Typography>
+                  <Chip
+                    size="small"
+                    label="✅ Verified Resident"
+                    sx={{ bgcolor: 'rgba(46,196,182,0.15)', color: '#2EC4B6', fontSize: '0.7rem', height: 20 }}
+                  />
+                </Box>
+              </Box>
+
+              <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mb: 2 }} />
+
+              {/* Shortcut to the Profile */}
+              <Button
+                fullWidth
+                variant="outlined"
+                component={Link}
+                to="/profile"
+                onClick={() => setUserMenuAnchor(null)}
+                size="small"
+                sx={{ mb: 1, color: '#fff', borderColor: 'rgba(255,255,255,0.2)', textTransform: 'none', fontWeight: 'bold' }}
+              >
+                👤 View Full Profile
+              </Button>
+
+              <Button
+                fullWidth
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={() => {
+                  setUserMenuAnchor(null);
+                  handleLogout();
+                }}
+                sx={{ textTransform: 'none', fontWeight: 'bold' }}
+              >
+                Sign Out
+              </Button>
+            </Popover>
+
             <Button color="inherit" onClick={handleLogout} size="small">
               Logout
             </Button>
           </>
         ) : (
-          <Button color="primary" variant="outlined" component={Link} to="/login" size="small">
-            Login
-          </Button>
+          <>
+            <Button component={Link} to="/suggestions" color="inherit" size="small" sx={{ mr: 1, color: '#F6BD60' }} startIcon={<LocalFireDepartmentIcon />}>
+              Cravings
+            </Button>
+            <Button color="primary" variant="outlined" component={Link} to="/login" size="small">
+              Login
+            </Button>
+          </>
         )}
       </Toolbar>
     </AppBar>
   );
 }
+
 
 // ── Login Page ───────────────────────────────────────────────────────────────
 function LoginPage() {
@@ -226,7 +406,7 @@ function LoginPage() {
       const res = await authAPI.verifyOtp(email, otp, name, role);
       const { access_token, user: userData } = res.data;
       login(userData || { email, role }, access_token);
-      const next = params.get('next') || (userData?.role === 'seller' ? '/seller-dashboard' : '/');
+      const next = params.get('next') || (userData?.role === 'seller' ? '/seller/dashboard' : '/');
       const safeNext = next && next.startsWith('/') ? next : '/';
       navigate(safeNext);
     } catch (err) {
@@ -242,10 +422,10 @@ function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await authAPI.login(email, password);
+      const res = await authAPI.login(email, password, role);
       const { access_token, user: userData } = res.data;
       login(userData || { email, role }, access_token);
-      const next = params.get('next') || (userData?.role === 'seller' ? '/seller-dashboard' : '/');
+      const next = params.get('next') || (userData?.role === 'seller' ? '/seller/dashboard' : '/');
       const safeNext = next && next.startsWith('/') ? next : '/';
       navigate(safeNext);
     } catch (err) {
@@ -263,10 +443,10 @@ function LoginPage() {
     setLoading(true);
     try {
       await authAPI.register(email, password, name, role);
-      const loginRes = await authAPI.login(email, password);
+      const loginRes = await authAPI.login(email, password, role);
       const { access_token, user: userData } = loginRes.data;
       login(userData || { email, name, role }, access_token);
-      const next = role === 'seller' ? '/seller-dashboard' : '/';
+      const next = role === 'seller' ? '/seller/dashboard' : '/';
       navigate(next);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to create account. Please check your information.'));
@@ -274,6 +454,7 @@ function LoginPage() {
       setLoading(false);
     }
   };
+
 
   return (
     <Box
@@ -434,9 +615,25 @@ function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               fullWidth
               required
-              sx={{ mb: 3 }}
+              sx={{ mb: 2 }}
               placeholder="••••••••"
             />
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              Sign in as:
+            </Typography>
+            <Box sx={{ mb: 3, display: 'flex', gap: 1.5 }}>
+              {['buyer', 'seller'].map((r) => (
+                <Button
+                  key={r}
+                  variant={role === r ? 'contained' : 'outlined'}
+                  color="primary"
+                  onClick={() => setRole(r)}
+                  sx={{ flex: 1, py: 1, fontWeight: 'bold' }}
+                >
+                  {r === 'buyer' ? '🛒 Resident Buyer' : '🍳 Home Chef'}
+                </Button>
+              ))}
+            </Box>
             <Button
               type="submit"
               variant="contained"
@@ -448,6 +645,7 @@ function LoginPage() {
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
+
           </Box>
         ) : (
           /* Create Account Form */
@@ -520,10 +718,15 @@ function LoginPage() {
 
 // ── Sellers Listing Page ─────────────────────────────────────────────────────
 function SellersPage() {
+  const location = useLocation();
+  const initialSearch = new URLSearchParams(location.search).get('search') || '';
   const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const { user } = useAuth();
+
   // Fallback: some flows may not have context hydrated yet — read localStorage
   const currentUser = user || (() => {
     try {
@@ -545,15 +748,99 @@ function SellersPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const filteredSellers = sellers.filter((seller) => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      seller.name?.toLowerCase().includes(q) ||
+      seller.bio?.toLowerCase().includes(q) ||
+      (seller.flat_number && String(seller.flat_number).toLowerCase().includes(q));
+
+    let matchesFilter = true;
+    if (selectedFilter === 'top_rated') {
+      matchesFilter = (seller.rating || 0) >= 4.0;
+    } else if (selectedFilter === 'punctual') {
+      matchesFilter = (seller.on_time_delivery_rate ?? 100) >= 90;
+    } else if (selectedFilter === 'open_now') {
+      matchesFilter = seller.is_open !== false;
+    }
+
+    return matchesSearch && matchesFilter;
+  });
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 4, textAlign: 'center' }}>
-        <Typography variant="h4" gutterBottom>
-          🍽️ Available Home Cooks
+        <Typography variant="h4" fontWeight="bold" gutterBottom>
+          🍽️ Society Home Chefs
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Fresh homemade food from your neighbours
+          Discover verified home cooks, daily kitchens, and special weekend bakers in your community.
         </Typography>
+      </Box>
+
+      {/* Chef Search & Filter Toolbar */}
+      <Box sx={{ mb: 4 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              placeholder="Search chef name, flat number, or special dishes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: 'rgba(255,255,255,0.5)' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: searchQuery ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchQuery('')} sx={{ color: '#aaa' }}>
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              }}
+              sx={{
+                bgcolor: '#191928',
+                borderRadius: 2,
+                '& .MuiOutlinedInput-root': {
+                  color: '#fff',
+                  '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
+                  '&:hover fieldset': { borderColor: '#E05A2B' },
+                  '&.Mui-focused fieldset': { borderColor: '#E05A2B' },
+                },
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Box display="flex" gap={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+              {[
+                { id: 'all', label: 'All Chefs' },
+                { id: 'top_rated', label: '⭐ Top Rated' },
+                { id: 'punctual', label: '⚡ High Punctuality' },
+                { id: 'open_now', label: '🟢 Open Now' },
+              ].map((f) => (
+                <Chip
+                  key={f.id}
+                  label={f.label}
+                  clickable
+                  onClick={() => setSelectedFilter(f.id)}
+                  sx={{
+                    bgcolor: selectedFilter === f.id ? '#E05A2B' : '#191928',
+                    color: '#fff',
+                    fontWeight: selectedFilter === f.id ? 'bold' : 'normal',
+                    border: '1px solid',
+                    borderColor: selectedFilter === f.id ? '#E05A2B' : 'rgba(255,255,255,0.1)',
+                    '&:hover': { bgcolor: selectedFilter === f.id ? '#c9481c' : '#252538' },
+                  }}
+                />
+              ))}
+            </Box>
+          </Grid>
+        </Grid>
       </Box>
 
       {loading && (
@@ -564,50 +851,103 @@ function SellersPage() {
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      {!loading && !error && sellers.length === 0 && (
-        <Paper sx={{ p: 6, textAlign: 'center', borderRadius: 3 }}>
+      {!loading && !error && filteredSellers.length === 0 && (
+        <Paper sx={{ p: 6, textAlign: 'center', borderRadius: 3, bgcolor: '#191928', color: '#fff' }}>
           <StoreIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" gutterBottom>No sellers yet</Typography>
-          <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Be the first to register as a seller in your society!
+          <Typography variant="h6" gutterBottom>
+            {searchQuery || selectedFilter !== 'all'
+              ? `No chefs found matching your search filter.`
+              : 'No sellers yet in your society.'}
           </Typography>
-          {currentUser && currentUser.role === 'seller' ? (
-            <Button variant="contained" component={Link} to="/seller/dashboard">
-              Your Seller Dashboard
-            </Button>
-          ) : (
-            <Button variant="contained" component={Link} to={`/login?role=seller&next=/seller/dashboard`}>
-              Register as Seller
-            </Button>
+          <Typography color="text.secondary" sx={{ mb: 3 }}>
+            {searchQuery || selectedFilter !== 'all' ? (
+              <Button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedFilter('all');
+                }}
+                sx={{ color: '#E05A2B', fontWeight: 'bold' }}
+              >
+                Clear Filters
+              </Button>
+            ) : (
+              'Be the first to register as a chef in your residential building!'
+            )}
+          </Typography>
+          {!searchQuery && selectedFilter === 'all' && (
+            currentUser && currentUser.role === 'seller' ? (
+              <Button variant="contained" component={Link} to="/seller/dashboard">
+                Your Seller Dashboard
+              </Button>
+            ) : (
+              <Button variant="contained" component={Link} to={`/login?role=seller&next=/seller/dashboard`}>
+                Register as Seller
+              </Button>
+            )
           )}
         </Paper>
       )}
 
       <Grid container spacing={3}>
-        {sellers.map((seller) => (
+        {filteredSellers.map((seller) => (
           <Grid item xs={12} sm={6} md={4} key={seller.id}>
-            <Card>
-              <CardContent>
+            <Card
+              sx={{
+                bgcolor: '#191928',
+                borderRadius: 3,
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                transition: 'transform 0.2s',
+                '&:hover': { transform: 'translateY(-4px)' },
+              }}
+            >
+              <CardContent sx={{ flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
-                    {seller.name?.[0] || '?'}
+                  <Avatar sx={{ bgcolor: '#E05A2B', width: 50, height: 50, mr: 2, fontWeight: 'bold', fontSize: '1.2rem' }}>
+                    {seller.name?.[0] || 'C'}
                   </Avatar>
                   <Box>
-                    <Typography variant="h6">{seller.name}</Typography>
-                    <Chip
-                      label={`⭐ ${seller.rating?.toFixed(1) || 'New'}`}
-                      size="small"
-                      color="secondary"
-                      variant="outlined"
-                    />
+                    <Typography variant="h6" fontWeight="bold">{seller.name}</Typography>
+                    <Box display="flex" gap={0.8} mt={0.5} flexWrap="wrap">
+                      <Chip
+                        label={`⭐ ${seller.rating?.toFixed(1) || 'New'}`}
+                        size="small"
+                        sx={{ bgcolor: 'rgba(246, 189, 96, 0.15)', color: '#F6BD60', fontWeight: 'bold' }}
+                      />
+                      {seller.flat_number && (
+                        <Chip
+                          label={`Flat ${seller.flat_number}`}
+                          size="small"
+                          sx={{ bgcolor: 'rgba(255,255,255,0.08)', color: '#fff' }}
+                        />
+                      )}
+                    </Box>
                   </Box>
                 </Box>
-                {seller.bio && (
-                  <Typography variant="body2" color="text.secondary">
-                    {seller.bio}
-                  </Typography>
-                )}
+
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  {seller.bio || 'Authentic home cook preparing homemade fresh food for neighbors.'}
+                </Typography>
+
+                {/* Badges: Punctuality & Fulfillment */}
+                <Box display="flex" gap={1} flexWrap="wrap">
+                  <Chip
+                    size="small"
+                    label={`⚡ ${seller.on_time_delivery_rate ?? 100}% on-time`}
+                    sx={{ bgcolor: 'rgba(46, 196, 182, 0.15)', color: '#2EC4B6', fontWeight: 'bold', fontSize: 11 }}
+                  />
+                  <Chip
+                    size="small"
+                    icon={<DeliveryDiningIcon sx={{ fontSize: '14px !important', color: '#fff !important' }} />}
+                    label="Doorstep & Pickup"
+                    sx={{ bgcolor: 'rgba(255,255,255,0.06)', color: '#ddd', fontSize: 11 }}
+                  />
+                </Box>
               </CardContent>
+
               <CardActions sx={{ px: 2, pb: 2, gap: 1 }}>
                 <Button
                   size="small"
@@ -615,7 +955,7 @@ function SellersPage() {
                   color="primary"
                   component={Link}
                   to={`/menu/${seller.id}`}
-                  sx={{ textTransform: 'none', fontWeight: 'bold' }}
+                  sx={{ textTransform: 'none', fontWeight: 'bold', flex: 1 }}
                 >
                   View Menu
                 </Button>
@@ -625,12 +965,11 @@ function SellersPage() {
                   color="primary"
                   component={Link}
                   to={`/menu/${seller.id}`}
-                  sx={{ bgcolor: '#E05A2B', textTransform: 'none', fontWeight: 'bold', '&:hover': { bgcolor: '#c9481c' } }}
+                  sx={{ bgcolor: '#E05A2B', textTransform: 'none', fontWeight: 'bold', flex: 1, '&:hover': { bgcolor: '#c9481c' } }}
                 >
                   Order Now
                 </Button>
               </CardActions>
-
             </Card>
           </Grid>
         ))}
@@ -694,14 +1033,24 @@ function HomePage() {
 }
 
 // ── Route Guard ───────────────────────────────────────────────────────────────
-function PrivateRoute({ children }) {
+function PrivateRoute({ children, allowedRoles }) {
   const { user } = useAuth();
   const location = useLocation();
-  return user ? children : <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+
+  if (!user) {
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={user.role === 'seller' ? '/seller/dashboard' : '/buyer'} replace />;
+  }
+
+  return children;
 }
 
 PrivateRoute.propTypes = {
   children: PropTypes.node,
+  allowedRoles: PropTypes.arrayOf(PropTypes.string),
 };
 
 // ── App Root ──────────────────────────────────────────────────────────────────
@@ -709,27 +1058,27 @@ function AppContent() {
   const { user } = useAuth();
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState([]);
-  const [activeSellerId, setActiveSellerId] = useState(null);
-  const [activeSellerName, setActiveSellerName] = useState(null);
   const navigate = useNavigate();
 
-  const handleAddToCart = (item, sellerId, sellerName) => {
-    // If switching sellers, reset basket
-    if (activeSellerId && activeSellerId !== sellerId) {
-      setCartItems([{ ...item, quantity: 1 }]);
-    } else {
-      setCartItems((prev) => {
-        const existing = prev.find((it) => it.id === item.id);
-        if (existing) {
-          return prev.map((it) =>
-            it.id === item.id ? { ...it, quantity: it.quantity + 1 } : it
-          );
-        }
-        return [...prev, { ...item, quantity: 1 }];
-      });
-    }
-    setActiveSellerId(sellerId);
-    if (sellerName) setActiveSellerName(sellerName);
+  const handleAddToCart = (item, sellerId, sellerName, sellerFlat) => {
+    setCartItems((prev) => {
+      const existing = prev.find((it) => it.id === item.id);
+      if (existing) {
+        return prev.map((it) =>
+          it.id === item.id ? { ...it, quantity: it.quantity + 1 } : it
+        );
+      }
+      return [
+        ...prev,
+        {
+          ...item,
+          quantity: 1,
+          sellerId: sellerId || item.sellerId || item.seller_id,
+          sellerName: sellerName || item.sellerName || item.seller_name || 'Home Chef',
+          sellerFlat: sellerFlat || item.sellerFlat || item.seller_flat || null,
+        },
+      ];
+    });
     setCartOpen(true);
   };
 
@@ -745,11 +1094,10 @@ function AppContent() {
 
   const handleClearCart = () => {
     setCartItems([]);
-    setActiveSellerId(null);
-    setActiveSellerName(null);
   };
 
   const totalCartCount = cartItems.reduce((sum, it) => sum + it.quantity, 0);
+
 
   return (
     <>
@@ -806,15 +1154,17 @@ function AppContent() {
         <Route
           path="/seller/dashboard"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRoles={['seller', 'admin']}>
               <SellerDashboardPage currentUser={user} />
             </PrivateRoute>
           }
         />
+        <Route path="/seller-dashboard" element={<Navigate to="/seller/dashboard" replace />} />
+
         <Route
           path="/seller/dashboard/menus"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRoles={['seller', 'admin']}>
               <MenuPage onAddToCart={handleAddToCart} />
             </PrivateRoute>
           }
@@ -822,7 +1172,7 @@ function AppContent() {
         <Route
           path="/seller/dashboard/orders"
           element={
-            <PrivateRoute>
+            <PrivateRoute allowedRoles={['seller', 'admin']}>
               <OrdersPage />
             </PrivateRoute>
           }
@@ -830,20 +1180,20 @@ function AppContent() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {/* Global Slide-Out Cart Drawer */}
+
+      {/* Global Slide-Out Multi-Chef Cart Drawer */}
       <CartDrawer
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         cartItems={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
         onClearCart={handleClearCart}
-        sellerId={activeSellerId}
-        sellerName={activeSellerName}
-        onOrderSuccess={(newOrder) => {
+        onOrderSuccess={() => {
           navigate('/orders');
         }}
       />
       <Footer />
+
     </>
   );
 }
