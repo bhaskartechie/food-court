@@ -1,10 +1,11 @@
 """SellerProfile model — extended profile for users with role=seller."""
 
 import re
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum as SAEnum
-from sqlalchemy import Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Float, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.base import Base, TimestampMixin
@@ -32,10 +33,20 @@ class SellerProfile(TimestampMixin, Base):
     # Seller bio — text area in UI describing what products they supply
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # ── Payment Details ───────────────────────────────────────────────────────
+    # ── Payment Details (Direct P2PM UPI) ─────────────────────────────────────
     # Store encrypted in production; plaintext acceptable for MVP
     bank_account: Mapped[str | None] = mapped_column(String(255), nullable=True)
     upi_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    upi_account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_upi_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ── SaaS Pass Quota & Platform Maintenance ────────────────────────────────
+    # First 50 completed orders are 100% free; subsequent orders charged ₹5 maintenance fee
+    free_orders_remaining: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    maintenance_balance: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("0.00"), nullable=False
+    )
+    lifetime_orders_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Profile photo URL (CDN / S3 link)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

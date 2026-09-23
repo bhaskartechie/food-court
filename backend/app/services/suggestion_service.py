@@ -80,6 +80,8 @@ def list_suggestions(
 
     # Fetch set of suggestion IDs upvoted by current user
     user_upvoted_ids = set()
+    seller_profile = None
+    seller_menus = []
     if current_user_id:
         upvotes = (
             db.query(DishUpvote.suggestion_id)
@@ -91,6 +93,13 @@ def list_suggestions(
         )
         user_upvoted_ids = {u[0] for u in upvotes}
 
+        # Check if current user is a seller to calculate real-time match scores
+        seller_profile = db.query(SellerProfile).filter(SellerProfile.id == current_user_id).first()
+        if seller_profile:
+            seller_menus = db.query(Menu).filter(Menu.seller_id == current_user_id).all()
+
+    from app.services.matching_service import calculate_craving_seller_match
+
     results = []
     for s in suggestions:
         user = db.query(User).filter(User.id == s.user_id).first()
@@ -99,6 +108,21 @@ def list_suggestions(
             if s.accepted_by_seller_id
             else None
         )
+        menu = (
+            db.query(Menu).filter(Menu.id == s.created_menu_id).first()
+            if s.created_menu_id
+            else None
+        )
+
+        match_score = None
+        match_reasons = None
+        matching_menu_items = None
+        if seller_profile and s.status == SuggestionStatus.open and s.user_id != current_user_id:
+            match_data = calculate_craving_seller_match(s, seller_profile, seller_menus)
+            match_score = match_data["match_score"]
+            match_reasons = match_data["match_reasons"]
+            matching_menu_items = match_data["matching_menu_items"]
+
         results.append({
             "id": s.id,
             "user_id": s.user_id,
@@ -106,14 +130,20 @@ def list_suggestions(
             "user_flat": user.flat_number if user else None,
             "title": s.title,
             "description": s.description,
-            "category": s.category,
+            "category": s.category.value if hasattr(s.category, "value") else str(s.category),
             "target_date": s.target_date.isoformat() if s.target_date else None,
             "upvotes_count": s.upvotes_count,
-            "status": s.status,
+            "status": s.status.value if hasattr(s.status, "value") else str(s.status),
             "accepted_by_seller_id": s.accepted_by_seller_id,
             "seller_name": seller.name if seller else None,
+            "seller_flat": seller.flat_number if seller else None,
             "created_menu_id": s.created_menu_id,
+            "menu_name": menu.name if menu else None,
+            "menu_price": float(menu.price) if menu else None,
             "has_upvoted": s.id in user_upvoted_ids,
+            "match_score": match_score,
+            "match_reasons": match_reasons,
+            "matching_menu_items": matching_menu_items,
             "created_at": s.created_at.isoformat(),
         })
 
@@ -165,7 +195,8 @@ def claim_suggestion(
     request: SuggestionClaimRequest,
 ) -> dict:
     """
-    Home chef accepts a community dish suggestion and launches a pre-order batch menu item.
+    Home chef accepts a community dish suggestion either by launching a new pre-order batch
+    or by linking an existing menu item.
     """
     seller_profile = db.query(SellerProfile).filter(SellerProfile.id == seller_id).first()
     if not seller_profile:
@@ -185,24 +216,46 @@ def claim_suggestion(
             detail=f"Cannot claim a suggestion in '{suggestion.status}' status.",
         )
 
-    # 1. Automatically create a Pre-Order Menu Item for the chef
-    menu_item = Menu(
-        seller_id=seller_id,
-        name=f"Special: {suggestion.title}",
-        description=suggestion.description or f"Community requested dish by Flat {suggestion.user_id}",
-        category=suggestion.category,
-        price=request.price,
-        is_available=True,
-        is_preorder_only=True,
-        preorder_cutoff_time=request.preorder_cutoff_time,
-        available_slots=request.available_slots,
-        max_batch_quantity=request.max_batch_quantity,
-        min_lead_time_hours=request.min_lead_time_hours,
-    )
-    db.add(menu_item)
-    db.flush()
+    if request.existing_menu_id:
+        # Link existing menu item from seller
+        menu_item = db.query(Menu).filter(
+            Menu.id == request.existing_menu_id,
+            Menu.seller_id == seller_id,
+        ).first()
+        if not menu_item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Selected menu item not found in your kitchen.",
+            )
+        logger.info("Chef seller_id=%s linked existing menu_id=%s for suggestion id=%s",
+                    seller_id, menu_item.id, suggestion_id)
+    else:
+        if request.price is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Price is required when launching a new pre-order batch.",
+            )
 
-    # 2. Update suggestion record
+        # Automatically create a Pre-Order Menu Item for the chef
+        menu_item = Menu(
+            seller_id=seller_id,
+            name=f"Special: {suggestion.title}",
+            description=suggestion.description or f"Community requested dish by Flat {suggestion.user_id}",
+            category=suggestion.category,
+            price=request.price,
+            is_available=True,
+            is_preorder_only=True,
+            preorder_cutoff_time=request.preorder_cutoff_time,
+            available_slots=request.available_slots,
+            max_batch_quantity=request.max_batch_quantity,
+            min_lead_time_hours=request.min_lead_time_hours,
+        )
+        db.add(menu_item)
+        db.flush()
+        logger.info("Chef seller_id=%s created new menu_id=%s for suggestion id=%s",
+                    seller_id, menu_item.id, suggestion_id)
+
+    # Update suggestion record
     suggestion.status = SuggestionStatus.claimed_by_chef
     suggestion.accepted_by_seller_id = seller_id
     suggestion.created_menu_id = menu_item.id
@@ -211,14 +264,12 @@ def claim_suggestion(
     db.refresh(suggestion)
     db.refresh(menu_item)
 
-    logger.info("Chef seller_id=%s claimed suggestion id=%s -> created menu_id=%s",
-                seller_id, suggestion_id, menu_item.id)
-
     return {
         "message": f"Pre-order batch launched for '{suggestion.title}'!",
         "suggestion_id": suggestion.id,
         "menu_id": menu_item.id,
         "menu_name": menu_item.name,
         "price": float(menu_item.price),
-        "status": suggestion.status,
+        "status": suggestion.status.value if hasattr(suggestion.status, "value") else str(suggestion.status),
     }
+

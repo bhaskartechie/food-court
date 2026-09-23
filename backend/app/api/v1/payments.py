@@ -24,10 +24,14 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user, get_db, require_role
 from app.db.models import User
 from app.schemas.payment import (
+    DirectUPIInitiateResponse,
+    MaintenanceTopupRequest,
     PaymentCaptureRequest,
     PaymentInitiateResponse,
     PaymentResponse,
     SellerBalanceResponse,
+    SellerMaintenanceStatusResponse,
+    SubmitUTRRequest,
 )
 from app.services import ledger_service, payment_service
 
@@ -38,6 +42,117 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 DB_DEPENDENCY = Depends(get_db)
 GET_USER_DEPENDENCY = Depends(get_current_user)
 BUYER_OR_ADMIN_DEPENDENCY = Depends(require_role("buyer", "admin"))
+SELLER_OR_ADMIN_DEPENDENCY = Depends(require_role("seller", "admin"))
+
+
+# ── Direct P2PM UPI & SaaS Pass Routes ────────────────────────────────────────
+
+@router.post(
+    "/orders/{order_id}/direct-upi",
+    response_model=DirectUPIInitiateResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def initiate_direct_upi_payment(
+    order_id: int,
+    current_user: User = BUYER_OR_ADMIN_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Generate Direct P2PM UPI intent for an order.
+    Returns seller's UPI VPA, name, amount, and deep-link URI.
+    """
+    data = payment_service.generate_direct_upi_payload(
+        db, order_id=order_id, buyer_id=current_user.id
+    )
+    return DirectUPIInitiateResponse(**data)
+
+
+@router.post(
+    "/orders/{order_id}/submit-utr",
+    response_model=PaymentResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def submit_order_utr(
+    order_id: int,
+    request: SubmitUTRRequest,
+    current_user: User = BUYER_OR_ADMIN_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Buyer submits 12-digit UPI UTR / reference ID after making direct transfer.
+    Moves payment status to 'submitted'.
+    """
+    payment = payment_service.submit_buyer_payment(
+        db,
+        order_id=order_id,
+        buyer_id=current_user.id,
+        utr_number=request.utr_number,
+    )
+    return PaymentResponse.model_validate(payment)
+
+
+@router.post(
+    "/orders/{order_id}/confirm-received",
+    response_model=PaymentResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_payment_received(
+    order_id: int,
+    current_user: User = SELLER_OR_ADMIN_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Home chef confirms receipt of direct UPI credit in their bank account.
+    Marks payment captured, moves order to 'accepted', and updates SaaS pass quota.
+    """
+    payment = payment_service.confirm_seller_payment(
+        db, order_id=order_id, seller_id=current_user.id
+    )
+    return PaymentResponse.model_validate(payment)
+
+
+@router.get(
+    "/maintenance/status",
+    response_model=SellerMaintenanceStatusResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_my_maintenance_status(
+    current_user: User = SELLER_OR_ADMIN_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Return the authenticated chef's SaaS pass quota, free orders remaining,
+    maintenance balance, and platform recharge details.
+    """
+    status_data = payment_service.get_seller_maintenance_status(
+        db, seller_id=current_user.id
+    )
+    return SellerMaintenanceStatusResponse(**status_data)
+
+
+@router.post(
+    "/maintenance/topup",
+    response_model=SellerMaintenanceStatusResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def topup_maintenance_balance(
+    request: MaintenanceTopupRequest,
+    current_user: User = SELLER_OR_ADMIN_DEPENDENCY,
+    db: Session = DB_DEPENDENCY,
+):
+    """
+    Chef submits recharge UTR to top up platform maintenance balance.
+    """
+    status_data = payment_service.topup_seller_maintenance(
+        db,
+        seller_id=current_user.id,
+        amount=request.amount,
+        utr_number=request.utr_number,
+    )
+    return SellerMaintenanceStatusResponse(**status_data)
+
+
+# ── Razorpay Gateway Routes (Legacy / Fallback) ───────────────────────────────
 
 
 @router.post(

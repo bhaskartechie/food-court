@@ -1,6 +1,6 @@
-# Project Board - Phase 1, v1.1 & Pre-Orders
+# Project Board - Phase 1, v1.2 & Direct UPI / SaaS Pass
 
-**Status**: Phase 1, v1.1 & Pre-Orders Marketplace (98% Complete)
+**Status**: Phase 1, v1.2 & Kitchen Power Tools (100% Complete)
 
 ## Epics Overview
 
@@ -9,15 +9,17 @@
 | 1. Infrastructure | 8 | 🟢 Complete | DevOps |
 | 2. Authentication & Notifications | 5 | 🟢 Complete | Backend / Frontend |
 | 3. Seller Management | 6 | 🟢 Complete | Backend / Frontend |
-| 4. Menu Management | 5 | 🟢 Complete | Backend / Frontend |
-| 5. Buyer Experience & Cart Drawer | 6 | 🟢 Complete | Frontend |
+| 4. Menu Management & Chef Power Tools | 10 | 🟢 Complete | Fullstack |
+| 5. Buyer Experience & Cart Drawer | 7 | 🟢 Complete | Frontend |
 | 6. Order Management & WebSockets | 7 | 🟢 Complete | Backend / Frontend |
 | 7. Ratings System | 4 | 🟢 Complete | Backend / Frontend |
 | 8. Admin Panel | 5 | 🟢 Complete | Backend / Frontend |
-| 9. Payments & Payouts (v1.1) | 6 | 🟢 Complete | Backend |
-| 10. In-Building Delivery Tracking (v1.1) | 4 | 🟢 Complete | Backend |
-| 11. Pre-Orders & Community Suggestions (v1.2) | 5 | 🟢 Complete | Backend / Frontend |
-| 12. Multimodal AI Explorations (Post-MVP) | 3 | ⏳ Planned (Experimental) | Frontend / AI |
+| 9. Payments & Financial Ledger | 6 | 🟢 Complete | Backend |
+| 10. In-Building Delivery Tracking | 4 | 🟢 Complete | Backend |
+| 11. Pre-Orders & Community Suggestions | 5 | 🟢 Complete | Backend / Frontend |
+| 12. Multimodal AI & Punctuality Engine | 6 | 🟢 Complete | Backend / Frontend |
+| 13. Direct P2PM UPI & SaaS Pass Quotas | 6 | 🟢 Complete | Backend / Frontend |
+| 14. Menu Concurrency Safeguards & Power Tools | 6 | 🟢 Complete | Fullstack |
 
 
 ---
@@ -63,7 +65,7 @@
 
 ---
 
-## Epic 4: Menu Management ✅ Complete
+## Epic 4: Menu Management & Chef Power Tools ✅ Complete
 
 | # | Task | Priority | Status | Estimate | Assigned |
 |---|------|----------|--------|----------|----------|
@@ -72,6 +74,11 @@
 | 4.3 | Price & description management | P0 | ✅ Done | 2h | Backend |
 | 4.4 | Menu category system & food search | P0 | ✅ Done | 3h | Backend |
 | 4.5 | Menu dashboard & image uploads (`/menus/{id}/image`) | P0 | ✅ Done | 6h | Fullstack |
+| 4.6 | Interactive Edit Dish dialog with live pre-population | P0 | ✅ Done | 3h | Frontend |
+| 4.7 | 1-Click "Duplicate / Clone Dish" draft creation | P1 | ✅ Done | 2h | Frontend |
+| 4.8 | Spice Level Indicator (`mild`, `medium`, `hot`) across DB, API & UI | P1 | ✅ Done | 3h | Fullstack |
+| 4.9 | Low Stock Warning Badge (`⚠️ Only X portions left`) | P1 | ✅ Done | 2h | Frontend |
+| 4.10 | Local device image picker with 5MB validation & live preview | P1 | ✅ Done | 3h | Fullstack |
 
 ---
 
@@ -162,12 +169,6 @@
 
 ---
 
-## Epic 12: Multimodal AI Explorations (Post-MVP) ⏳ Experimental
-
-| # | Task | Priority | Status | Estimate | Assigned |
-|---|------|----------|--------|----------|----------|
-| 12.1 | Multimodal search & recipe canvas UI components | P2 | 🟡 In Progress | 6h | Frontend |
-| 12.2 | Multimodal AI backend endpoint (`POST /ai/search`, `/ai/stream`) | P2 | ⏳ Planned | 6h | Backend / AI |
 ## Epic 12: Multimodal AI & Punctuality Engine (v1.1.0-beta.1) ✅ Complete
 
 | # | Task | Priority | Status | Estimate | Assigned |
@@ -178,6 +179,32 @@
 | 12.4 | Frontend Punctuality Trust Badges (Menu, Buyer & Kitchen Dashboards) | P1 | ✅ Done | 3h | Frontend |
 | 12.5 | End-to-End Frontend Integration Test Suite (Jest + React Testing Library) | P0 | ✅ Done | 4h | Frontend |
 | 12.6 | Staging Docker Compose Stack & Pre-Flight Migration Verification | P0 | ✅ Done | 3h | DevOps |
+
+---
+
+## Epic 13: Direct P2PM UPI & SaaS Pass Maintenance Quotas (v1.2.0) ✅ Complete
+
+| # | Task | Priority | Status | Estimate | Assigned |
+|---|------|----------|--------|----------|----------|
+| 13.1 | Direct P2PM UPI models (`PaymentMethod.upi`, `seller_upi_id`, `utr_reference`) | P0 | ✅ Done | 4h | Backend |
+| 13.2 | Dynamic UPI QR generator & UTR submission flow (`POST /payments/orders/{id}/pay-upi`) | P0 | ✅ Done | 4h | Backend |
+| 13.3 | Chef 1-tap payment confirmation & order acceptance (`POST /payments/orders/{id}/confirm-received`) | P0 | ✅ Done | 3h | Backend |
+| 13.4 | SaaS Pass model: 50 free orders/month + ₹5.00/order maintenance quota | P0 | ✅ Done | 4h | Backend |
+| 13.5 | Platform Maintenance Credit wallet & recharge packs (`POST /payments/maintenance/topup`) | P0 | ✅ Done | 4h | Fullstack |
+| 13.6 | Buyer Direct UPI Modal (`DirectUPIPaymentModal.jsx`) & Chef SaaS Pass dashboard card | P0 | ✅ Done | 5h | Frontend |
+
+---
+
+## Epic 14: Menu Concurrency Safeguards & Chef Power Tools (v1.2.1) ✅ Complete
+
+| # | Task | Priority | Status | Estimate | Assigned |
+|---|------|----------|--------|----------|----------|
+| 14.1 | In-flight cart price concurrency guard (HTTP 400 rejection on price change) | P0 | ✅ Done | 3h | Backend |
+| 14.2 | Spice Level indicator schema & migration (`mild`, `medium`, `hot`) with Alembic | P1 | ✅ Done | 3h | Backend |
+| 14.3 | Interactive Edit Dish dialog with live state pre-population (`PUT /menus/{id}`) | P0 | ✅ Done | 3h | Frontend |
+| 14.4 | 1-Click "Duplicate / Clone Dish" draft creation button | P1 | ✅ Done | 2h | Frontend |
+| 14.5 | Local photo browser with client-side 5MB check & thumbnail preview | P1 | ✅ Done | 3h | Fullstack |
+| 14.6 | Automated end-to-end unit tests for Menu Edit, Duplicate, and Concurrency | P0 | ✅ Done | 4h | Fullstack |
 
 ---
 
@@ -200,18 +227,18 @@
 
 ---
 
-## Phase 1, v1.1 & Pre-Orders Summary
+## Phase 1 & v1.2 Full-Stack Platform Summary
 
-**Total Core Tasks**: 62  
-**Completed**: 62 (100%)  
+**Total Core Tasks**: 79  
+**Completed**: 79 (100%)  
 **In Progress**: 0 (0%)  
 **Planned**: 0 (0%)  
 
-**Current Platform Version**: `v1.1.0-beta.1`  
+**Current Platform Version**: `v1.2.1`  
 **Test Suite**: 
-- Backend Pytest: **18/18 tests passing (100%)**
-- Frontend Jest & React Testing Library: **6/6 test journeys passing (100%)**
-- Production Build: **Optimized & passing**
+- Backend Pytest: **41/41 tests passing (100%)**
+- Frontend Jest & React Testing Library: **27/27 tests across 11 test suites passing (100%)**
+- Staging Stack: Fully deployed and verified on Docker Compose (Frontend `:3000`, Backend `:8000`, PostgreSQL 16)
 
 ---
 
@@ -254,6 +281,16 @@
 - Automated punctuality calculation engine based on delivery timestamps and slot deadlines
 - Multimodal AI dish nutrition/allergen analysis and meal advisor endpoints
 - Production Docker compose staging stack with pre-flight database migration check
+- **Status**: Completed
+
+### Milestone 8: Direct P2PM UPI, SaaS Pass & Kitchen Power Tools (`v1.2.1`) ✅
+- Direct P2PM UPI payments with dynamic QR code generation and 12-digit UTR verification
+- SaaS Pass maintenance quotas (50 free orders/month + flat ₹5.00/order fee with chef platform credit wallet)
+- Interactive menu item editing (`PUT /api/v1/menus/{id}`) and 1-click "Duplicate / Clone Dish" draft creation
+- Spice level indicator (`🌶️ Mild`, `🌶️🌶️ Medium`, `🌶️🌶️🌶️ Hot`) across DB, API, dialog and cards
+- Low stock warning badge (`⚠️ Only X portions left` when $1 \le \text{qty} \le 3$)
+- Local device image browsing ($\le 5\text{ MB}$) with thumbnail preview and direct backend upload
+- In-flight cart price concurrency guard protecting against price mismatches on checkout
 - **Status**: Completed
 
 

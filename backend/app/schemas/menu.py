@@ -22,6 +22,14 @@ class MenuCreateRequest(BaseModel):
     max_batch_quantity: int = 0
     min_lead_time_hours: int = 2
     image_url: str | None = None
+    spice_level: str | None = "medium"
+
+    @field_validator("spice_level")
+    @classmethod
+    def validate_spice_level(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"mild", "medium", "hot"}:
+            raise ValueError("spice_level must be one of: mild, medium, hot")
+        return v
 
     @field_validator("category")
     @classmethod
@@ -55,6 +63,14 @@ class MenuUpdateRequest(BaseModel):
     max_batch_quantity: int | None = None
     min_lead_time_hours: int | None = None
     image_url: str | None = None
+    spice_level: str | None = None
+
+    @field_validator("spice_level")
+    @classmethod
+    def validate_spice_level_update(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"mild", "medium", "hot"}:
+            raise ValueError("spice_level must be one of: mild, medium, hot")
+        return v
 
     @field_validator("category")
     @classmethod
@@ -90,6 +106,7 @@ class MenuItemResponse(BaseModel):
     max_batch_quantity: int = 0
     min_lead_time_hours: int = 2
     image_url: str | None = None
+    spice_level: str | None = "medium"
 
     model_config = {"from_attributes": True}
 

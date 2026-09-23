@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.models import Menu, Order
+from app.db.models import Menu, Order, SellerProfile
 from app.db.models.enums import OrderStatus
 from app.schemas.order import OrderCreateRequest
 
@@ -24,6 +24,7 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
 
     Validates:
     - Buyer cannot place an order from their own kitchen (self-ordering prevention).
+    - Seller must have configured their UPI ID.
     - All menu items belong to the specified seller and are available.
     - Decrements Menu.quantity for items with finite stock and auto-marks items
       unavailable when stock reaches zero.
@@ -32,6 +33,13 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Chefs cannot place orders from their own kitchen.",
+        )
+
+    seller_prof = db.query(SellerProfile).filter(SellerProfile.id == request.seller_id).first()
+    if seller_prof and not seller_prof.upi_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The home chef has not configured their UPI payment address yet. Please order from an active kitchen.",
         )
 
     menu_ids = [item.menu_id for item in request.items]
@@ -67,6 +75,14 @@ def create_order(db: Session, buyer_id: int, request: OrderCreateRequest) -> Ord
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Insufficient stock for '{menu.name}'. Available: {menu.quantity}.",
             )
+
+        # Check price concurrency (prevent silent price mismatches if chef updated price while item was in cart)
+        if hasattr(req_item, "price") and req_item.price is not None:
+            if abs(float(req_item.price) - float(menu.price)) > 0.01:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The price of '{menu.name}' has been updated by the chef from ₹{float(req_item.price):.2f} to ₹{float(menu.price):.2f}. Please review your cart before completing checkout.",
+                )
 
         total_price += req_item.quantity * float(menu.price)
         items_data.append({

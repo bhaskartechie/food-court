@@ -45,6 +45,8 @@ import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
+import HomeIcon from '@mui/icons-material/Home';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import { authAPI, sellersAPI, getErrorMessage } from './services/api';
 
 import MenuPage from './pages/Menu';
@@ -58,19 +60,21 @@ import Footer from './components/Footer';
 import './App.css';
 import LandingPage from './pages/Landing';
 
-// ── Warm Culinary Theme ───────────────────────────────────────────────────────
+// ── Warm Culinary Theme (Modern Coffee/Food Ordering Inspired) ───────────────
 const theme = createTheme({
   palette: {
     mode: 'dark',
-    primary: { main: '#E05A2B' },       // Warm Terracotta
+    primary: { main: '#E05A2B', dark: '#C9481C', light: '#FF7D4D' },       // Warm Terracotta
+    forest: { main: '#1B4332', light: '#2D6A4F', contrastText: '#FFFFFF' }, // Dark Forest Green
     secondary: { main: '#F6BD60' },     // Honey Saffron
-    success: { main: '#2EC4B6' },       // Fresh Mint
-    background: { default: '#12121A', paper: '#191928' },
+    success: { main: '#2D6A4F' },       // Deep Forest Mint
+    background: { default: '#0F0F1A', paper: '#181828' },
   },
   typography: {
-    fontFamily: '"Plus Jakarta Sans", "Inter", "Roboto", sans-serif',
+    fontFamily: '"Poppins", "Plus Jakarta Sans", "Inter", -apple-system, sans-serif',
     h4: { fontWeight: 700 },
     h5: { fontWeight: 600 },
+    h6: { fontWeight: 600 },
   },
   components: {
     MuiCard: {
@@ -80,7 +84,7 @@ const theme = createTheme({
     },
     MuiButton: {
       styleOverrides: {
-        root: { borderRadius: 10, textTransform: 'none', fontWeight: 600 },
+        root: { borderRadius: 12, textTransform: 'none', fontWeight: 600 },
       },
     },
   },
@@ -1059,6 +1063,7 @@ function AppContent() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleAddToCart = (item, sellerId, sellerName, sellerFlat) => {
     setCartItems((prev) => {
@@ -1192,6 +1197,103 @@ function AppContent() {
           navigate('/orders');
         }}
       />
+
+      {/* Mobile Bottom Navigation Bar (Modern Food App Inspiration) */}
+      {user && (
+        <>
+          <Box sx={{ display: { xs: 'block', md: 'none' }, height: 68 }} />
+          <Paper
+            elevation={12}
+            sx={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: 1100,
+              display: { xs: 'flex', md: 'none' },
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              py: 0.8,
+              px: 1,
+              bgcolor: 'rgba(24, 24, 40, 0.95)',
+              backdropFilter: 'blur(16px)',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <IconButton
+              component={Link}
+              to={user.role === 'seller' ? '/seller/dashboard' : '/buyer'}
+              aria-label="Mobile Navigation Home"
+              sx={{
+                flexDirection: 'column',
+                color: location.pathname === '/buyer' || location.pathname.startsWith('/seller') ? '#2EC4B6' : 'text.secondary',
+                py: 0.5,
+              }}
+            >
+              <HomeIcon fontSize="small" />
+              <Typography variant="caption" sx={{ fontSize: '0.68rem', mt: 0.2, fontWeight: 600 }}>Home</Typography>
+            </IconButton>
+
+            <IconButton
+              component={Link}
+              to="/suggestions"
+              aria-label="Mobile Navigation Cravings"
+              sx={{
+                flexDirection: 'column',
+                color: location.pathname === '/suggestions' ? '#2EC4B6' : 'text.secondary',
+                py: 0.5,
+              }}
+            >
+              <LocalFireDepartmentIcon fontSize="small" />
+              <Typography variant="caption" sx={{ fontSize: '0.68rem', mt: 0.2, fontWeight: 600 }}>Cravings</Typography>
+            </IconButton>
+
+            <IconButton
+              component={Link}
+              to="/orders"
+              aria-label="Mobile Navigation Orders"
+              sx={{
+                flexDirection: 'column',
+                color: location.pathname === '/orders' ? '#2EC4B6' : 'text.secondary',
+                py: 0.5,
+              }}
+            >
+              <DeliveryDiningIcon fontSize="small" />
+              <Typography variant="caption" sx={{ fontSize: '0.68rem', mt: 0.2, fontWeight: 600 }}>Orders</Typography>
+            </IconButton>
+
+            <IconButton
+              onClick={() => setCartOpen(true)}
+              aria-label="Mobile Navigation Cart"
+              sx={{
+                flexDirection: 'column',
+                color: 'text.secondary',
+                py: 0.5,
+              }}
+            >
+              <Badge badgeContent={cartItems.reduce((acc, item) => acc + item.quantity, 0)} color="error">
+                <ShoppingBagOutlinedIcon fontSize="small" />
+              </Badge>
+              <Typography variant="caption" sx={{ fontSize: '0.68rem', mt: 0.2, fontWeight: 600 }}>Cart</Typography>
+            </IconButton>
+
+            <IconButton
+              component={Link}
+              to="/profile"
+              aria-label="Mobile Navigation Profile"
+              sx={{
+                flexDirection: 'column',
+                color: location.pathname === '/profile' ? '#2EC4B6' : 'text.secondary',
+                py: 0.5,
+              }}
+            >
+              <PersonOutlineIcon fontSize="small" />
+              <Typography variant="caption" sx={{ fontSize: '0.68rem', mt: 0.2, fontWeight: 600 }}>Profile</Typography>
+            </IconButton>
+          </Paper>
+        </>
+      )}
+
       <Footer />
 
     </>

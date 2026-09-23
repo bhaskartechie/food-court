@@ -38,6 +38,14 @@ RUN sed -i 's/\r//' /entrypoint.sh && chmod +x /entrypoint.sh
 # ── Application code ──────────────────────────────────────────────────────────
 COPY . .
 
+# ── Non-root Security Hardening (Senior Cybersecurity Audit) ───────────────────
+# Run the application under a dedicated, unprivileged appuser rather than root
+RUN useradd -m -u 1001 appuser && \
+    mkdir -p /app/uploads/menus && \
+    chown -R appuser:appuser /app /entrypoint.sh
+
+USER appuser
+
 # ── Port ─────────────────────────────────────────────────────────────────────
 EXPOSE 8000
 

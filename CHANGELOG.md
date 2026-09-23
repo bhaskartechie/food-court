@@ -5,6 +5,44 @@ All notable changes to Society Food Platform will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-23
+
+### Added
+- **Chef Menu Management & Power Tools**:
+  - Interactive **Edit Dish** dialog with pre-populated form state supporting name, category, pricing, portions, spice level, description, and photo updates via `PUT /api/v1/menus/{menu_id}`.
+  - 1-Click **"Duplicate / Clone Dish"** button cloning active menu items into new drafts titled `Dish Name (Copy)`.
+  - **Spice Level Indicator**: Database schema & Alembic migration `ea7fe3ab7835` adding `spice_level` (`mild`, `medium`, `hot`), displayed with badges (`🌶️ Mild`, `🌶️🌶️ Medium`, `🌶️🌶️🌶️ Hot`).
+  - **Low Stock Urgency Badge**: Automated `⚠️ Only X portions left` indicators when inventory is between 1 and 3 portions.
+  - **Local Device Photo Browsing**: Native file picker supporting `.jpg`, `.jpeg`, `.png`, and `.webp` with client-side 5MB size check, instant thumbnail previews, and upload to `/api/v1/menus/{id}/image`.
+- **In-Flight Cart Concurrency & Real-Time Price Protection**:
+  - Guard in `order_service.py` comparing cart item prices against current database prices at checkout.
+  - Rejects transactions with HTTP 400 if prices differ by $> ₹0.01$, prompting buyers to review updated prices and preventing silent overcharging.
+- **Automated Test Matrix Expansion**:
+  - Added `seller-menu-edit.test.jsx` (Edit modal, clone workflow, spice badges, low stock alerts).
+  - Added backend pytest cases for cart concurrency price guards and spice level CRUD in `test_orders.py`.
+  - Backend test coverage reached **41/41 passing tests (100%)**; Frontend test coverage reached **27/27 passing tests across 11 test suites (100%)**.
+
+### Fixed
+- Resolved symptom where menu items were not rendering after creation due to `{ items: [...], total: N }` payload response parsing in `SellerDashboard.jsx`.
+
+---
+
+## [1.2.0] - 2026-09-15
+
+### Added
+- **Direct P2PM UPI & Zero-MDR Payment Flow**:
+  - Direct buyer-to-seller UPI QR code generation with pre-populated chef VPA and order amount.
+  - 12-digit bank UTR reference input and chef 1-tap confirmation workflow.
+- **SaaS Pass Platform Maintenance Quota**:
+  - 50 free orders per month platform allowance per chef.
+  - Flat ₹5.00/order maintenance fee after quota via prepaid platform credit wallet.
+  - Platform maintenance balance topup with QR code and UTR submission.
+- **Community Cravings Demand Matching**:
+  - Culinary algorithm matching community craving requests to resident chefs with real-time scoring.
+  - 1-click batch launch directly from cravings radar.
+
+---
+
 ## [1.1.0-beta.1] - 2026-08-30
 
 ### Added

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Dialog,
@@ -15,6 +15,9 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DeliveryDiningIcon from '@mui/icons-material/DeliveryDining';
 import StorefrontIcon from '@mui/icons-material/Storefront';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import StarIcon from '@mui/icons-material/Star';
 
 const SLOT_SHORT_LABELS = {
   lunch_today: '☀️ Lunch Today',
@@ -24,10 +27,21 @@ const SLOT_SHORT_LABELS = {
   weekend_special: '🎉 Weekend Special',
 };
 
+const getApiOrigin = () => {
+  const raw = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  return raw.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
+};
+
 // Fallback high-aesthetic dish photography based on category/keywords
 export function getDishImageUrl(item) {
-  if (item?.image_url && item.image_url.trim().startsWith('http')) {
-    return item.image_url;
+  if (item?.image_url) {
+    const trimmed = item.image_url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      return `${getApiOrigin()}${trimmed}`;
+    }
   }
   const name = (item?.name || '').toLowerCase();
   const category = (item?.category || '').toLowerCase();
@@ -66,6 +80,8 @@ export default function DishImageModal({
   onAddToCart,
   isSelfKitchen = false,
 }) {
+  const [isFavorite, setIsFavorite] = useState(false);
+
   if (!item) return null;
 
   const imageUrl = getDishImageUrl(item);
@@ -95,7 +111,7 @@ export default function DishImageModal({
         },
       }}
     >
-      {/* Top Image Banner */}
+      {/* Top Image Banner with Modern Coffee/Food App Overlays */}
       <Box sx={{ position: 'relative', width: '100%', height: { xs: 240, sm: 300 } }}>
         <Box
           component="img"
@@ -108,36 +124,60 @@ export default function DishImageModal({
           }}
         />
 
-        {/* Category Badge overlay */}
-        <Chip
-          label={isVeg ? '🟢 Pure Veg' : '🔴 Non-Veg'}
-          size="small"
-          sx={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            bgcolor: 'rgba(22, 22, 34, 0.85)',
-            color: '#fff',
-            backdropFilter: 'blur(6px)',
-            fontWeight: 'bold',
-            border: '1px solid rgba(255,255,255,0.15)',
-          }}
-        />
+        {/* Top-Left Badges: Category & Star Rating */}
+        <Box sx={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 1 }}>
+          <Chip
+            label={isVeg ? '🟢 Pure Veg' : '🔴 Non-Veg'}
+            size="small"
+            sx={{
+              bgcolor: 'rgba(22, 22, 34, 0.85)',
+              color: '#fff',
+              backdropFilter: 'blur(6px)',
+              fontWeight: 'bold',
+              border: '1px solid rgba(255,255,255,0.15)',
+            }}
+          />
+          <Chip
+            icon={<StarIcon sx={{ color: '#F6BD60 !important', fontSize: '15px !important' }} />}
+            label="4.8"
+            size="small"
+            sx={{
+              bgcolor: 'rgba(22, 22, 34, 0.85)',
+              color: '#fff',
+              backdropFilter: 'blur(6px)',
+              fontWeight: 'bold',
+              border: '1px solid rgba(255,255,255,0.15)',
+            }}
+          />
+        </Box>
 
-        <IconButton
-          onClick={onClose}
-          sx={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            bgcolor: 'rgba(0,0,0,0.6)',
-            color: '#fff',
-            backdropFilter: 'blur(6px)',
-            '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
+        {/* Top-Right Action Controls: Favorite Heart & Close */}
+        <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 1 }}>
+          <IconButton
+            onClick={() => setIsFavorite(!isFavorite)}
+            aria-label="favorite"
+            sx={{
+              bgcolor: 'rgba(0,0,0,0.6)',
+              color: isFavorite ? '#E05A2B' : '#fff',
+              backdropFilter: 'blur(6px)',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
+            }}
+          >
+            {isFavorite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
+          </IconButton>
+
+          <IconButton
+            onClick={onClose}
+            sx={{
+              bgcolor: 'rgba(0,0,0,0.6)',
+              color: '#fff',
+              backdropFilter: 'blur(6px)',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {/* Content Section */}
@@ -156,6 +196,30 @@ export default function DishImageModal({
           <Typography variant="h5" fontWeight="bold" color="#E05A2B">
             ₹{item.price}
           </Typography>
+        </Box>
+
+        {/* Culinary & Dietary Attribute Pills (Coffee App Style) */}
+        <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
+          <Chip
+            size="small"
+            label={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+            sx={{ bgcolor: 'rgba(46, 196, 182, 0.15)', color: '#2EC4B6', fontWeight: 600, fontSize: 12 }}
+          />
+          <Chip
+            size="small"
+            label="🌾 Fresh Kitchen Made"
+            sx={{ bgcolor: 'rgba(246, 189, 96, 0.15)', color: '#F6BD60', fontWeight: 600, fontSize: 12 }}
+          />
+          <Chip
+            size="small"
+            label="⏱️ Ready in ~25m"
+            sx={{ bgcolor: 'rgba(255, 255, 255, 0.08)', color: '#ccc', fontWeight: 600, fontSize: 12 }}
+          />
+          <Chip
+            size="small"
+            label="🌶️ Mildly Spiced"
+            sx={{ bgcolor: 'rgba(224, 90, 43, 0.15)', color: '#E05A2B', fontWeight: 600, fontSize: 12 }}
+          />
         </Box>
 
         {item.description && (

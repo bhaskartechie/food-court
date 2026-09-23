@@ -86,6 +86,9 @@ describe('Role Navigation, User Info Popover, Dynamic Portions & Self-Ordering P
     jest.spyOn(apiModule.sellersAPI, 'getMe').mockResolvedValue({ data: { id: 202, is_open: true } });
     jest.spyOn(apiModule.ordersAPI, 'list').mockResolvedValue({ data: { orders: [] } });
     jest.spyOn(apiModule.paymentsAPI, 'getBalance').mockResolvedValue({ data: { current_balance: 1500, total_earned: 4500 } });
+    if (apiModule.paymentsAPI.getMaintenanceStatus) {
+      jest.spyOn(apiModule.paymentsAPI, 'getMaintenanceStatus').mockResolvedValue({ data: null });
+    }
     jest.spyOn(apiModule.menusAPI, 'bySeller').mockResolvedValue({ data: mockDishes });
     const updatePortionsSpy = jest.spyOn(apiModule.menusAPI, 'updatePortions').mockResolvedValue({ data: { id: 501, is_available: true, quantity: 13 } });
 

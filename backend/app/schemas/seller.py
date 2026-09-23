@@ -15,6 +15,7 @@ class SellerUpdateRequest(BaseModel):
     bio: str | None = None
     photo_url: str | None = None
     upi_id: str | None = None
+    upi_account_name: str | None = None
 
 
 class SellerResponse(BaseModel):
@@ -32,6 +33,10 @@ class SellerResponse(BaseModel):
     total_orders_completed: int = 0
     flat_number: str | None = None
     is_approved: bool
+    upi_id: str | None = None
+    upi_account_name: str | None = None
+    is_upi_verified: bool = False
+    free_orders_remaining: int = 50
 
     model_config = {"from_attributes": True}
 
@@ -40,4 +45,5 @@ class SellerDetailResponse(SellerResponse):
     """Full seller detail (includes email, used in admin and own-profile views)."""
 
     email: str
+    maintenance_balance: float = 0.0
 

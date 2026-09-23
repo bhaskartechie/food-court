@@ -8,7 +8,7 @@ Responsibilities:
   - FastAPI HTTP Bearer scheme
 """
 
-import random
+import secrets
 import string
 import logging
 from datetime import datetime, timedelta, timezone
@@ -44,7 +44,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return _pwd_context.verify(plain_password, hashed_password)
 
 
-# ── Redis-backed OTP Store ────────────────────────────────────────────────────
+# ── Redis-backed OTP Store & Rate Limiting ────────────────────────────────────
 # Primary store: Redis (required for multi-worker production deployments).
 # Fallback: in-memory dict (single-worker dev only — OTPs lost on restart).
 #
@@ -55,6 +55,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 import json
 
 _otp_fallback: dict = {}  # Used only when Redis is unreachable
+_otp_request_rate_limit: dict = {}  # In-memory rate limiting fallback
 
 
 def _get_redis():
@@ -70,8 +71,46 @@ def _get_redis():
 
 
 def generate_otp(length: int = 6) -> str:
-    """Generate a cryptographically random numeric OTP."""
-    return "".join(random.choices(string.digits, k=length))
+    """Generate a cryptographically secure numeric OTP using secrets."""
+    return "".join(secrets.choice(string.digits) for _ in range(length))
+
+
+def check_otp_request_rate_limit(
+    email: str,
+    max_requests: Optional[int] = None,
+    window_minutes: Optional[int] = None,
+) -> None:
+    """
+    Enforce rate limiting on OTP generation requests to prevent brute force and spam.
+    Max `max_requests` attempts within `window_minutes`.
+    Raises HTTP 429 if the limit is exceeded.
+    """
+    max_reqs = max_requests or settings.OTP_RATE_LIMIT_REQUESTS
+    window_mins = window_minutes or settings.OTP_RATE_LIMIT_WINDOW_MINUTES
+
+    r = _get_redis()
+    if r:
+        key = f"otp_req_rate:{email}"
+        current = r.incr(key)
+        if current == 1:
+            r.expire(key, window_mins * 60)
+        if current > max_reqs:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many OTP requests. Please wait {window_mins} minutes before requesting another code.",
+            )
+    else:
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(minutes=window_mins)
+        timestamps = _otp_request_rate_limit.get(email, [])
+        timestamps = [t for t in timestamps if t > cutoff]
+        if len(timestamps) >= max_reqs:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many OTP requests. Please wait {window_mins} minutes before requesting another code.",
+            )
+        timestamps.append(now)
+        _otp_request_rate_limit[email] = timestamps
 
 
 def store_otp(email: str, otp: str) -> None:

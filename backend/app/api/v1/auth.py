@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user, get_db
 from app.core.config import settings
 from app.core.security import (
+    check_otp_request_rate_limit,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -286,6 +287,9 @@ async def request_otp(
     - Sends an email in the background via SMTP (aiosmtplib).
     - If in development mode or SMTP is unconfigured, returns dev_otp in the response for easy testing.
     """
+    # ── Rate Limiting (Senior Cybersecurity Audit: prevent brute force & flooding) ─
+    check_otp_request_rate_limit(str(request.email))
+
     otp = generate_otp(length=settings.OTP_LENGTH)
     store_otp(str(request.email), otp)
 

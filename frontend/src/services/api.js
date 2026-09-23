@@ -83,7 +83,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location && process.env.NODE_ENV !== 'test') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -140,6 +142,9 @@ export const sellersAPI = {
   setOpenStatus: (isOpen) =>
     api.patch('/sellers/me/open', { is_open: isOpen }),
 
+  /** Update own seller profile (bio, photo, upi_id, upi_account_name) */
+  updateProfile: (data) => api.put('/sellers/me', data),
+
   /** Register as a seller */
   register: (data) => api.post('/sellers/register', data),
 };
@@ -172,6 +177,15 @@ export const menusAPI = {
       quantity,
     }),
 
+  /** Upload image for a menu item */
+  uploadImage: (menuId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/menus/${menuId}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
   /** Delete a menu item */
   delete: (menuId) => api.delete(`/menus/${menuId}`),
 };
@@ -203,20 +217,43 @@ export const suggestionsAPI = {
   list: (status = null, category = null, skip = 0, limit = 30) =>
     api.get('/suggestions/', { params: { status, category, skip, limit } }),
 
+  /** List open cravings matched for the authenticated seller's kitchen */
+  listMatched: (minScore = 35, limit = 30) =>
+    api.get('/suggestions/matched', { params: { min_score: minScore, limit } }),
+
   /** Propose a new dish suggestion */
   create: (data) => api.post('/suggestions/', data),
 
   /** Toggle upvote on a suggestion */
   upvote: (suggestionId) => api.post(`/suggestions/${suggestionId}/upvote`),
 
-  /** Chef claims suggestion and launches pre-order batch */
+  /** Chef claims suggestion and launches pre-order batch or links existing item */
   claim: (suggestionId, data) =>
     api.post(`/suggestions/${suggestionId}/claim`, data),
 };
 
+
 // ── Payments & Financial Ledger API ─────────────────────────────────────────
 export const paymentsAPI = {
-  /** Initiate payment for an order */
+  /** Initiate direct P2PM UPI payment intent */
+  initiateDirectUPI: (orderId) => api.post(`/payments/orders/${orderId}/direct-upi`),
+
+  /** Buyer submits 12-digit UPI UTR reference */
+  submitUTR: (orderId, utrNumber) =>
+    api.post(`/payments/orders/${orderId}/submit-utr`, { utr_number: utrNumber }),
+
+  /** Seller confirms receipt of direct UPI payment in bank account */
+  confirmReceived: (orderId) =>
+    api.post(`/payments/orders/${orderId}/confirm-received`),
+
+  /** Get chef's SaaS pass quota, free orders remaining, and balance */
+  getMaintenanceStatus: () => api.get('/payments/maintenance/status'),
+
+  /** Chef recharges maintenance credit balance */
+  topupMaintenance: (amount, utrNumber) =>
+    api.post('/payments/maintenance/topup', { amount, utr_number: utrNumber }),
+
+  /** Initiate payment for an order (Razorpay fallback) */
   initiate: (orderId) => api.post(`/payments/orders/${orderId}/initiate`),
 
   /** Capture payment with Razorpay signature */

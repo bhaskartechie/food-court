@@ -32,8 +32,12 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
+import CloseIcon from '@mui/icons-material/Close';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import {
   ordersAPI,
@@ -61,36 +65,64 @@ export default function SellerDashboardPage({ currentUser }) {
   const [error, setError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
 
-  // New Menu Item Dialog
+  // SaaS Pass & Platform Maintenance Quota
+  const [maintenanceStatus, setMaintenanceStatus] = useState(null);
+  const [openTopupDialog, setOpenTopupDialog] = useState(false);
+  const [topupAmount, setTopupAmount] = useState(100);
+  const [topupUtr, setTopupUtr] = useState('');
+  const [submittingTopup, setSubmittingTopup] = useState(false);
+
+  // Menu Item Dialog (Create & Edit)
   const [openNewMenu, setOpenNewMenu] = useState(false);
+  const [editingMenuId, setEditingMenuId] = useState(null);
   const [menuName, setMenuName] = useState('');
   const [menuPrice, setMenuPrice] = useState(120);
   const [menuCat, setMenuCat] = useState('veg');
   const [menuDesc, setMenuDesc] = useState('');
   const [menuPortions, setMenuPortions] = useState(15);
+  const [menuSpiceLevel, setMenuSpiceLevel] = useState('medium');
   const [menuImageUrl, setMenuImageUrl] = useState('');
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isPreorder, setIsPreorder] = useState(true);
   const [cutoffTime, setCutoffTime] = useState('11:00');
   const [maxBatch, setMaxBatch] = useState(15);
   const [submittingMenu, setSubmittingMenu] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const sellerId = currentUser?.id;
-      const [profRes, ordersRes, balRes, menusRes] = await Promise.all([
+      const sellerId =
+        currentUser?.id ||
+        (() => {
+          try {
+            return JSON.parse(localStorage.getItem('user') || 'null')?.id;
+          } catch {
+            return null;
+          }
+        })();
+      const [profRes, ordersRes, balRes, menusRes, maintRes] = await Promise.all([
         sellersAPI.getMe().catch(() => ({ data: null })),
         ordersAPI.list(0, 50).catch(() => ({ data: { orders: [] } })),
         paymentsAPI.getBalance().catch(() => ({ data: { current_balance: 0, total_earned: 0 } })),
         sellerId
           ? menusAPI.bySeller(sellerId, null, null, false).catch(() => ({ data: [] }))
           : Promise.resolve({ data: [] }),
+        paymentsAPI.getMaintenanceStatus
+          ? paymentsAPI.getMaintenanceStatus().catch(() => ({ data: null }))
+          : Promise.resolve({ data: null }),
       ]);
 
       if (profRes.data) setSellerProfile(profRes.data);
+      if (maintRes.data) setMaintenanceStatus(maintRes.data);
       setOrders(ordersRes.data.orders || []);
       setBalance(balRes.data || { current_balance: 0, total_earned: 0 });
-      setMenuItems(Array.isArray(menusRes.data) ? menusRes.data : []);
+      const rawMenuData = menusRes.data;
+      const fetchedItems = Array.isArray(rawMenuData)
+        ? rawMenuData
+        : (rawMenuData?.items || []);
+      setMenuItems(fetchedItems);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load seller dashboard.'));
     } finally {
@@ -114,20 +146,50 @@ export default function SellerDashboardPage({ currentUser }) {
   };
 
   const handleAdvanceOrderStatus = async (orderId, currentStatus) => {
-    const nextMap = {
-      pending: 'accepted',
-      accepted: 'ready',
-      ready: 'completed',
-    };
-    const nextStatus = nextMap[currentStatus];
-    if (!nextStatus) return;
-
     try {
-      await ordersAPI.updateStatus(orderId, nextStatus);
-      setActionSuccess(`Order #${orderId} updated to ${nextStatus.toUpperCase()}`);
+      if (currentStatus === 'pending') {
+        try {
+          await paymentsAPI.confirmReceived(orderId);
+          setActionSuccess(`Payment confirmed & Order #${orderId} ACCEPTED!`);
+        } catch {
+          await ordersAPI.updateStatus(orderId, 'accepted');
+          setActionSuccess(`Order #${orderId} updated to ACCEPTED`);
+        }
+      } else {
+        const nextMap = {
+          accepted: 'ready',
+          ready: 'completed',
+        };
+        const nextStatus = nextMap[currentStatus];
+        if (!nextStatus) return;
+        await ordersAPI.updateStatus(orderId, nextStatus);
+        setActionSuccess(`Order #${orderId} updated to ${nextStatus.toUpperCase()}`);
+      }
       fetchDashboardData();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update order status.'));
+    }
+  };
+
+  const handleTopupSubmit = async (e) => {
+    e.preventDefault();
+    if (!topupUtr.trim() || topupUtr.trim().length < 6) {
+      setError('Please enter a valid recharge UTR reference number.');
+      return;
+    }
+    try {
+      setSubmittingTopup(true);
+      setError(null);
+      const res = await paymentsAPI.topupMaintenance(Number(topupAmount), topupUtr.trim());
+      if (res.data) setMaintenanceStatus(res.data);
+      setActionSuccess(`Successfully recharged ₹${topupAmount} platform credits!`);
+      setOpenTopupDialog(false);
+      setTopupUtr('');
+      fetchDashboardData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to submit maintenance recharge.'));
+    } finally {
+      setSubmittingTopup(false);
     }
   };
 
@@ -185,33 +247,120 @@ export default function SellerDashboardPage({ currentUser }) {
     }
   };
 
-  const handleCreateMenuSubmit = async () => {
+  const handleOpenCreateMenu = () => {
+    setEditingMenuId(null);
+    setMenuName('');
+    setMenuPrice(120);
+    setMenuCat('veg');
+    setMenuDesc('');
+    setMenuPortions(15);
+    setMenuSpiceLevel('medium');
+    setMenuImageUrl('');
+    setSelectedImageFile(null);
+    setImagePreviewUrl('');
+    setIsPreorder(true);
+    setCutoffTime('11:00');
+    setMaxBatch(15);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setOpenNewMenu(true);
+  };
+
+  const handleOpenEditMenu = (dish) => {
+    setEditingMenuId(dish.id);
+    setMenuName(dish.name || '');
+    setMenuPrice(dish.price || 0);
+    setMenuCat(dish.category || 'veg');
+    setMenuDesc(dish.description || '');
+    setMenuPortions(dish.quantity !== undefined ? dish.quantity : 15);
+    setMenuSpiceLevel(dish.spice_level || 'medium');
+    setMenuImageUrl(dish.image_url || '');
+    setSelectedImageFile(null);
+    const resolvedUrl = dish.image_url
+      ? (dish.image_url.startsWith('http')
+          ? dish.image_url
+          : `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dish.image_url}`)
+      : '';
+    setImagePreviewUrl(resolvedUrl);
+    setIsPreorder(Boolean(dish.is_preorder_only));
+    setCutoffTime(dish.preorder_cutoff_time || '11:00');
+    setMaxBatch(dish.max_batch_quantity || dish.quantity || 15);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setOpenNewMenu(true);
+  };
+
+  const handleDuplicateDish = (dish) => {
+    setEditingMenuId(null); // Cloning creates a new dish
+    setMenuName(`${dish.name} (Copy)`);
+    setMenuPrice(dish.price || 0);
+    setMenuCat(dish.category || 'veg');
+    setMenuDesc(dish.description || '');
+    setMenuPortions(dish.quantity !== undefined ? dish.quantity : 15);
+    setMenuSpiceLevel(dish.spice_level || 'medium');
+    setMenuImageUrl(dish.image_url || '');
+    setSelectedImageFile(null);
+    const resolvedUrl = dish.image_url
+      ? (dish.image_url.startsWith('http')
+          ? dish.image_url
+          : `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dish.image_url}`)
+      : '';
+    setImagePreviewUrl(resolvedUrl);
+    setIsPreorder(Boolean(dish.is_preorder_only));
+    setCutoffTime(dish.preorder_cutoff_time || '11:00');
+    setMaxBatch(dish.max_batch_quantity || dish.quantity || 15);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setOpenNewMenu(true);
+    setActionSuccess(`Cloned '${dish.name}' as a draft. Adjust details and click Save!`);
+  };
+
+  const handleSaveMenuSubmit = async () => {
     if (!menuName.trim()) return;
     try {
       setSubmittingMenu(true);
-      const portionsVal = parseInt(menuPortions, 10) || 15;
-      await menusAPI.create({
-        name: menuName,
+      setError(null);
+      const portionsVal = parseInt(menuPortions, 10) || 0;
+      const menuPayload = {
+        name: menuName.trim(),
         price: parseFloat(menuPrice),
         category: menuCat,
-        description: menuDesc || undefined,
+        description: menuDesc ? menuDesc.trim() : undefined,
         quantity: portionsVal,
         is_available: portionsVal > 0,
-        image_url: menuImageUrl || undefined,
+        spice_level: menuSpiceLevel || 'medium',
+        image_url: menuImageUrl ? menuImageUrl.trim() : undefined,
         is_preorder_only: isPreorder,
         preorder_cutoff_time: isPreorder ? cutoffTime : undefined,
         available_slots: isPreorder ? ['lunch_today', 'dinner_today'] : undefined,
         max_batch_quantity: isPreorder ? (parseInt(maxBatch, 10) || portionsVal) : portionsVal,
-      });
+      };
+
+      let targetMenuId = editingMenuId;
+
+      if (editingMenuId) {
+        await menusAPI.update(editingMenuId, menuPayload);
+        setActionSuccess(`Dish '${menuName}' updated successfully!`);
+      } else {
+        const createRes = await menusAPI.create(menuPayload);
+        targetMenuId = createRes?.data?.id;
+        setActionSuccess('Menu item / Pre-order batch created successfully!');
+      }
+
+      // If user selected a local file from disk, upload it to the menu item endpoint
+      if (selectedImageFile && targetMenuId) {
+        try {
+          await menusAPI.uploadImage(targetMenuId, selectedImageFile);
+          setActionSuccess(`Dish '${menuName}' saved & photo uploaded!`);
+        } catch (uploadErr) {
+          setError(getErrorMessage(uploadErr, 'Dish saved, but failed to upload photo.'));
+        }
+      }
+
       setOpenNewMenu(false);
-      setMenuName('');
-      setMenuDesc('');
-      setMenuImageUrl('');
-      setMenuPortions(15);
-      setActionSuccess('Menu item / Pre-order batch created successfully!');
+      setEditingMenuId(null);
+      setSelectedImageFile(null);
+      setImagePreviewUrl('');
       fetchDashboardData();
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to create menu item.'));
+      setError(getErrorMessage(err, editingMenuId ? 'Failed to update menu item.' : 'Failed to create menu item.'));
     } finally {
       setSubmittingMenu(false);
     }
@@ -350,32 +499,50 @@ export default function SellerDashboardPage({ currentUser }) {
           </Card>
         </Grid>
 
-        {/* Ledger & Wallet Card */}
+        {/* SaaS Pass & Direct UPI Quota Card */}
         <Grid item xs={12} md={5}>
           <Card sx={{ bgcolor: '#191928', borderRadius: 3, border: '1px solid rgba(255,255,255,0.08)' }}>
             <CardContent>
-              <Box display="flex" alignItems="center" gap={1} mb={2}>
-                <AccountBalanceWalletIcon sx={{ color: '#2EC4B6' }} />
-                <Typography variant="h6" fontWeight="bold">
-                  Wallet & Earnings
-                </Typography>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <AccountBalanceWalletIcon sx={{ color: '#4caf50' }} />
+                  <Typography variant="h6" fontWeight="bold">
+                    SaaS Pass & Quota
+                  </Typography>
+                </Box>
+                <Chip
+                  size="small"
+                  label={sellerProfile?.upi_id ? '🟢 Direct UPI' : '⚠️ Missing UPI'}
+                  sx={{
+                    bgcolor: sellerProfile?.upi_id ? 'rgba(76, 175, 80, 0.15)' : 'rgba(255, 152, 0, 0.15)',
+                    color: sellerProfile?.upi_id ? '#4caf50' : '#ff9800',
+                    fontWeight: 'bold',
+                  }}
+                />
               </Box>
 
               <Box display="flex" justifyContent="space-between" mb={2}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    Available Balance
+                    Free Orders Remaining
                   </Typography>
-                  <Typography variant="h4" fontWeight="bold" color="#2EC4B6">
-                    ₹{balance.current_balance?.toFixed(2) || '0.00'}
+                  <Typography variant="h4" fontWeight="bold" color="#4caf50">
+                    {maintenanceStatus?.free_orders_remaining ?? sellerProfile?.free_orders_remaining ?? 50}{' '}
+                    <span style={{ fontSize: '1rem', color: '#aaa' }}>/ 50</span>
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    100% Free Quota
                   </Typography>
                 </Box>
                 <Box textAlign="right">
                   <Typography variant="caption" color="text.secondary">
-                    Total Gross Sales
+                    Platform Balance
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold" color="#fff">
-                    ₹{balance.total_earned?.toFixed(2) || '0.00'}
+                  <Typography variant="h5" fontWeight="bold" color="#E05A2B">
+                    ₹{Number(maintenanceStatus?.maintenance_balance ?? sellerProfile?.maintenance_balance ?? 0).toFixed(2)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    ₹5.00/order after free quota
                   </Typography>
                 </Box>
               </Box>
@@ -383,15 +550,17 @@ export default function SellerDashboardPage({ currentUser }) {
               <Button
                 fullWidth
                 variant="outlined"
-                disabled={balance.current_balance <= 0}
+                onClick={() => setOpenTopupDialog(true)}
                 sx={{
-                  color: '#2EC4B6',
-                  borderColor: '#2EC4B6',
+                  color: '#4caf50',
+                  borderColor: '#4caf50',
                   fontWeight: 'bold',
                   textTransform: 'none',
+                  borderRadius: 2,
+                  '&:hover': { borderColor: '#81c784', bgcolor: 'rgba(76, 175, 80, 0.08)' },
                 }}
               >
-                Request Payout
+                + Recharge Platform Credits
               </Button>
             </CardContent>
           </Card>
@@ -410,7 +579,7 @@ export default function SellerDashboardPage({ currentUser }) {
           variant="contained"
           size="small"
           startIcon={<AddCircleOutlineIcon />}
-          onClick={() => setOpenNewMenu(true)}
+          onClick={handleOpenCreateMenu}
           sx={{
             bgcolor: '#E05A2B',
             fontWeight: 'bold',
@@ -433,7 +602,7 @@ export default function SellerDashboardPage({ currentUser }) {
             variant="outlined"
             size="small"
             startIcon={<AddCircleOutlineIcon />}
-            onClick={() => setOpenNewMenu(true)}
+            onClick={handleOpenCreateMenu}
             sx={{ color: '#E05A2B', borderColor: '#E05A2B', textTransform: 'none' }}
           >
             Create Your First Dish
@@ -468,33 +637,108 @@ export default function SellerDashboardPage({ currentUser }) {
                   }}
                 >
                   <CardContent sx={{ flexGrow: 1, p: 2.5 }}>
-                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-                      <Chip
-                        label={dish.category?.toUpperCase() || 'DISH'}
-                        size="small"
-                        sx={{
-                          bgcolor: `${catColor}22`,
-                          color: catColor,
-                          fontWeight: 'bold',
-                          fontSize: '0.7rem',
-                          height: 22,
-                        }}
-                      />
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Typography variant="h6" fontWeight="bold" color="#E05A2B">
+                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1.5} gap={1}>
+                      <Box display="flex" alignItems="center" gap={0.8} flexWrap="wrap">
+                        <Chip
+                          label={dish.category?.toUpperCase() || 'DISH'}
+                          size="small"
+                          sx={{
+                            bgcolor: `${catColor}22`,
+                            color: catColor,
+                            fontWeight: 'bold',
+                            fontSize: '0.7rem',
+                            height: 22,
+                          }}
+                        />
+                        {/* Option B: Spice Level Indicator */}
+                        {dish.spice_level && (
+                          <Chip
+                            label={
+                              dish.spice_level === 'hot'
+                                ? '🌶️🌶️🌶️ Hot'
+                                : dish.spice_level === 'mild'
+                                ? '🌶️ Mild'
+                                : '🌶️🌶️ Medium'
+                            }
+                            size="small"
+                            sx={{
+                              bgcolor: 'rgba(255,255,255,0.06)',
+                              color: dish.spice_level === 'hot' ? '#ff5252' : '#F6BD60',
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              height: 22,
+                            }}
+                          />
+                        )}
+                        {/* Option C: Low Stock Warning Badge */}
+                        {dish.is_available && dish.quantity !== undefined && dish.quantity >= 1 && dish.quantity <= 3 && (
+                          <Chip
+                            label={`⚠️ Only ${dish.quantity} left`}
+                            size="small"
+                            sx={{
+                              bgcolor: 'rgba(255, 152, 0, 0.15)',
+                              color: '#ff9800',
+                              fontWeight: 'bold',
+                              fontSize: '0.7rem',
+                              height: 22,
+                              border: '1px solid rgba(255, 152, 0, 0.3)',
+                            }}
+                          />
+                        )}
+                      </Box>
+
+                      <Box display="flex" alignItems="center" gap={0.5}>
+                        <Typography variant="h6" fontWeight="bold" color="#E05A2B" sx={{ mr: 0.5 }}>
                           ₹{dish.price}
                         </Typography>
+                        <Tooltip title="Edit dish details & spice">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenEditMenu(dish)}
+                            sx={{ color: '#aaa', '&:hover': { color: '#2EC4B6' } }}
+                            aria-label={`Edit ${dish.name}`}
+                          >
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Duplicate / clone this dish">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDuplicateDish(dish)}
+                            sx={{ color: '#aaa', '&:hover': { color: '#F6BD60' } }}
+                            aria-label={`Duplicate ${dish.name}`}
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Delete dish from kitchen menu">
                           <IconButton
                             size="small"
                             onClick={() => handleDeleteDish(dish.id, dish.name)}
                             sx={{ color: '#aaa', '&:hover': { color: '#ff5252' } }}
+                            aria-label={`Delete ${dish.name}`}
                           >
                             <DeleteOutlineIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Box>
                     </Box>
+
+                    {dish.image_url && (
+                      <Box
+                        component="img"
+                        src={dish.image_url.startsWith('http') ? dish.image_url : `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}${dish.image_url}`}
+                        alt={dish.name}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                        sx={{
+                          width: '100%',
+                          height: 120,
+                          objectFit: 'cover',
+                          borderRadius: 2,
+                          mb: 1.5,
+                        }}
+                      />
+                    )}
 
                     <Typography variant="subtitle1" fontWeight="bold" color="#fff" mb={0.5}>
                       {dish.name}
@@ -712,13 +956,15 @@ export default function SellerDashboardPage({ currentUser }) {
         </Grid>
       )}
 
-      {/* New Menu / Pre-Order Dialog */}
+      {/* New Menu / Edit Menu Dialog */}
       <Dialog
         open={openNewMenu}
         onClose={() => setOpenNewMenu(false)}
         PaperProps={{ sx: { bgcolor: '#161622', color: '#fff', width: 480 } }}
       >
-        <DialogTitle fontWeight="bold">Create Dish or Pre-Order Batch</DialogTitle>
+        <DialogTitle fontWeight="bold">
+          {editingMenuId ? '✏️ Edit Menu Item' : '✨ Create Dish or Pre-Order Batch'}
+        </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -766,6 +1012,21 @@ export default function SellerDashboardPage({ currentUser }) {
             ))}
           </TextField>
 
+          {/* Option B: Spice Level Selector */}
+          <TextField
+            select
+            fullWidth
+            label="Spice Level"
+            value={menuSpiceLevel}
+            onChange={(e) => setMenuSpiceLevel(e.target.value)}
+            margin="dense"
+            sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
+          >
+            <MenuItem value="mild">🌶️ Mild (Kid-friendly / Gentle)</MenuItem>
+            <MenuItem value="medium">🌶️🌶️ Medium (Balanced spice)</MenuItem>
+            <MenuItem value="hot">🌶️🌶️🌶️ Hot (Authentic spicy)</MenuItem>
+          </TextField>
+
           <TextField
             fullWidth
             multiline
@@ -777,12 +1038,99 @@ export default function SellerDashboardPage({ currentUser }) {
             sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
           />
 
+          {/* Local Photo Upload & Live Thumbnail Preview */}
+          <Box
+            sx={{
+              mb: 2,
+              p: 2,
+              border: '1px dashed rgba(255,255,255,0.2)',
+              borderRadius: 2,
+              bgcolor: 'rgba(255,255,255,0.02)',
+            }}
+          >
+            <Typography variant="caption" sx={{ color: '#aaa', display: 'block', mb: 1 }}>
+              Dish Photo (Upload from device or enter web URL):
+            </Typography>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/png,image/jpeg,image/webp,image/jpg"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  if (file.size > 5 * 1024 * 1024) {
+                    setError('Image size exceeds 5MB limit. Please choose a smaller photo.');
+                    return;
+                  }
+                  setSelectedImageFile(file);
+                  setImagePreviewUrl(URL.createObjectURL(file));
+                }
+              }}
+            />
+            <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PhotoCameraIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                sx={{
+                  color: '#E05A2B',
+                  borderColor: '#E05A2B',
+                  textTransform: 'none',
+                  '&:hover': { borderColor: '#c9481c', bgcolor: 'rgba(224,90,43,0.08)' },
+                }}
+              >
+                {selectedImageFile ? 'Change Photo' : 'Browse Local Photo...'}
+              </Button>
+              {selectedImageFile && (
+                <Typography variant="caption" sx={{ color: '#2EC4B6' }}>
+                  {selectedImageFile.name} ({(selectedImageFile.size / 1024).toFixed(0)} KB)
+                </Typography>
+              )}
+              {imagePreviewUrl && (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setSelectedImageFile(null);
+                    setImagePreviewUrl('');
+                    setMenuImageUrl('');
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  sx={{ color: '#aaa', textTransform: 'none', ml: 'auto' }}
+                >
+                  Remove Photo
+                </Button>
+              )}
+            </Box>
+            {imagePreviewUrl && (
+              <Box
+                component="img"
+                src={imagePreviewUrl}
+                alt="Dish preview"
+                sx={{
+                  width: '100%',
+                  maxHeight: 140,
+                  objectFit: 'cover',
+                  borderRadius: 2,
+                  mt: 1.5,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                }}
+              />
+            )}
+          </Box>
+
           <TextField
             fullWidth
-            label="Photo URL (Optional)"
+            label="Or Image URL (Optional)"
             placeholder="https://images.unsplash.com/..."
             value={menuImageUrl}
-            onChange={(e) => setMenuImageUrl(e.target.value)}
+            onChange={(e) => {
+              setMenuImageUrl(e.target.value);
+              if (!selectedImageFile) {
+                setImagePreviewUrl(e.target.value);
+              }
+            }}
             margin="dense"
             sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
           />
@@ -828,12 +1176,126 @@ export default function SellerDashboardPage({ currentUser }) {
           <Button
             variant="contained"
             disabled={submittingMenu || !menuName.trim()}
-            onClick={handleCreateMenuSubmit}
+            onClick={handleSaveMenuSubmit}
             sx={{ bgcolor: '#E05A2B', fontWeight: 'bold' }}
           >
-            {submittingMenu ? <CircularProgress size={20} /> : 'Save Dish'}
+            {submittingMenu ? (
+              <CircularProgress size={20} />
+            ) : editingMenuId ? (
+              'Update Dish'
+            ) : (
+              'Save Dish'
+            )}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Recharge Platform Credits Dialog */}
+      <Dialog
+        open={openTopupDialog}
+        onClose={() => setOpenTopupDialog(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { bgcolor: '#161622', color: '#fff', borderRadius: 3, border: '1px solid #28283c' },
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box>
+            <Typography variant="h6" fontWeight="bold">
+              Recharge Platform Credits
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#4caf50' }}>
+              Flat ₹5.00/order • Instant Top-up
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setOpenTopupDialog(false)} sx={{ color: '#aaa' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ borderColor: '#232336' }}>
+          <Typography variant="caption" sx={{ color: '#aaa', display: 'block', mb: 2 }}>
+            Choose a maintenance credit pack to keep your kitchen open and active:
+          </Typography>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5, mb: 2.5 }}>
+            {[
+              { amt: 50, orders: '10 Orders' },
+              { amt: 100, orders: '20 Orders' },
+              { amt: 250, orders: '50 Orders' },
+            ].map((pack) => (
+              <Button
+                key={pack.amt}
+                variant={topupAmount === pack.amt ? 'contained' : 'outlined'}
+                onClick={() => setTopupAmount(pack.amt)}
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  py: 1,
+                  bgcolor: topupAmount === pack.amt ? '#4caf50' : 'transparent',
+                  color: topupAmount === pack.amt ? '#fff' : '#4caf50',
+                  borderColor: '#4caf50',
+                  '&:hover': {
+                    bgcolor: topupAmount === pack.amt ? '#388e3c' : 'rgba(76, 175, 80, 0.1)',
+                  },
+                }}
+              >
+                <Typography variant="subtitle2" fontWeight="bold">
+                  ₹{pack.amt}
+                </Typography>
+                <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>
+                  {pack.orders}
+                </Typography>
+              </Button>
+            ))}
+          </Box>
+
+          {/* Platform QR */}
+          <Box sx={{ textAlign: 'center', mb: 2 }}>
+            <Box
+              component="img"
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                `upi://pay?pa=${maintenanceStatus?.platform_upi_vpa || 'societyfood@upi'}&pn=SocietyFood&am=${topupAmount}&cu=INR`
+              )}`}
+              alt="Platform Topup QR"
+              sx={{ width: 150, height: 150, bgcolor: '#fff', p: 1, borderRadius: 2, mb: 1 }}
+            />
+            <Typography variant="caption" sx={{ color: '#aaa', display: 'block' }}>
+              Scan to pay ₹{topupAmount} to{' '}
+              <strong style={{ color: '#fff' }}>{maintenanceStatus?.platform_upi_vpa || 'societyfood@upi'}</strong>
+            </Typography>
+          </Box>
+
+          <Box component="form" onSubmit={handleTopupSubmit}>
+            <TextField
+              fullWidth
+              size="small"
+              label="12-Digit Recharge UTR / Transaction ID"
+              placeholder="e.g. 412345678901"
+              value={topupUtr}
+              onChange={(e) => setTopupUtr(e.target.value)}
+              required
+              sx={{ mb: 2, '& .MuiInputBase-input': { color: '#fff' } }}
+              InputLabelProps={{ sx: { color: '#bbb' } }}
+            />
+
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={submittingTopup || topupUtr.trim().length < 6}
+              sx={{
+                bgcolor: '#4caf50',
+                '&:hover': { bgcolor: '#388e3c' },
+                fontWeight: 'bold',
+                py: 1,
+              }}
+            >
+              {submittingTopup ? 'Verifying...' : `Confirm ₹${topupAmount} Recharge`}
+            </Button>
+          </Box>
+        </DialogContent>
       </Dialog>
     </Container>
   );

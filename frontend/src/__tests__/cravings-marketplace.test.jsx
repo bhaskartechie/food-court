@@ -1,6 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import SuggestionsBoard from '../pages/SuggestionsBoard';
+
 
 // Mock API
 const mockSuggestions = [
@@ -35,6 +37,12 @@ describe('Community Cravings Marketplace', () => {
     jest.spyOn(apiModule.suggestionsAPI, 'list').mockResolvedValue({
       data: { suggestions: mockSuggestions },
     });
+    jest.spyOn(apiModule.suggestionsAPI, 'listMatched').mockResolvedValue({
+      data: { suggestions: mockSuggestions },
+    });
+    jest.spyOn(apiModule.menusAPI, 'bySeller').mockResolvedValue({
+      data: { items: [] },
+    });
     jest.spyOn(apiModule.suggestionsAPI, 'create').mockResolvedValue({
       data: { id: 3, title: 'Pav Bhaji' },
     });
@@ -49,8 +57,14 @@ describe('Community Cravings Marketplace', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
   test('renders community cravings board and triggers upvote', async () => {
-    render(<SuggestionsBoard currentUser={{ id: 1, name: 'Alice', role: 'buyer' }} />);
+
+    render(
+      <MemoryRouter>
+        <SuggestionsBoard currentUser={{ id: 1, name: 'Alice', role: 'buyer' }} />
+      </MemoryRouter>
+    );
 
     // Wait for suggestions to load
     await waitFor(() => {
@@ -67,15 +81,21 @@ describe('Community Cravings Marketplace', () => {
   });
 
   test('renders chef claim buttons for home chefs', async () => {
-    render(<SuggestionsBoard currentUser={{ id: 2, name: 'Chef Bob', role: 'seller' }} />);
+    render(
+      <MemoryRouter>
+        <SuggestionsBoard currentUser={{ id: 2, name: 'Chef Bob', role: 'seller' }} />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/Misal Pav Combo/i)).toBeInTheDocument();
     });
 
     // Check chef claim buttons
-    const claimButtons = screen.getAllByRole('button', { name: /I'll Cook This!/i });
+    const claimButtons = screen.getAllByRole('button', { name: /Accept & Cook|I'll Cook This!/i });
     expect(claimButtons.length).toBeGreaterThanOrEqual(1);
   });
+
 });
+
 

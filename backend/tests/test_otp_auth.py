@@ -16,7 +16,7 @@ def test_request_otp_email(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert "OTP successfully dispatched" in data["message"]
-    assert data["expires_in_minutes"] == 10
+    assert data["expires_in_minutes"] == 5
     assert "dev_otp" in data
     assert len(data["dev_otp"]) == 6
 
@@ -123,4 +123,24 @@ def test_verify_otp_rate_limiting(client: TestClient):
         json={"email": email, "otp": "999999"},
     )
     assert res.status_code in (400, 429)
+
+
+def test_request_otp_rate_limiting(client: TestClient):
+    """Verify that excessive OTP requests within the rate limit window trigger HTTP 429."""
+    email = "burst_request@societyfood.com"
+    # Make 3 valid requests (the allowed threshold)
+    for _ in range(3):
+        res = client.post(
+            "/api/v1/auth/otp/request",
+            json={"email": email, "role": "buyer"},
+        )
+        assert res.status_code == 200
+
+    # 4th request should exceed the limit and receive 429
+    excess_res = client.post(
+        "/api/v1/auth/otp/request",
+        json={"email": email, "role": "buyer"},
+    )
+    assert excess_res.status_code == 429
+    assert "Too many OTP requests" in excess_res.json()["detail"]
 

@@ -11,6 +11,8 @@ Flow:
 import hashlib
 import hmac
 import logging
+import re
+import urllib.parse
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Optional
@@ -19,8 +21,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import Order, Payment
-from app.db.models.enums import OrderStatus, PaymentStatus
+from app.db.models import LedgerEntry, Order, Payment, SellerProfile, User
+from app.db.models.enums import LedgerEntryType, OrderStatus, PaymentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -366,4 +368,309 @@ def refund_payment(db: Session, order_id: int, admin_id: int) -> Payment:
 def get_payment_by_order(db: Session, order_id: int) -> Payment | None:
     """Return the Payment for an order, or None if not found."""
     return db.query(Payment).filter(Payment.order_id == order_id).first()
+
+
+def generate_direct_upi_payload(db: Session, order_id: int, buyer_id: int) -> dict:
+    """
+    Generate Direct P2PM UPI intent and details for an order.
+    Bypasses third-party payment aggregators; buyer pays seller directly.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found."
+        )
+
+    if order.buyer_id != buyer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only pay for your own orders.",
+        )
+
+    if order.status != OrderStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot initiate payment for an order in '{order.status}' status.",
+        )
+
+    seller_user = db.query(User).filter(User.id == order.seller_id).first()
+    seller_profile = (
+        db.query(SellerProfile).filter(SellerProfile.id == order.seller_id).first()
+    )
+
+    if not seller_profile or not seller_profile.upi_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The home chef has not configured their UPI ID yet. Direct UPI payments cannot be processed.",
+        )
+
+    seller_vpa = seller_profile.upi_id.strip()
+    seller_name = (seller_profile.upi_account_name or (seller_user.name if seller_user else "Home Chef")).strip()
+    amount_str = f"{Decimal(str(order.total_price)):.2f}"
+
+    # Standard NPCI UPI URI Specification
+    query_params = {
+        "pa": seller_vpa,
+        "pn": seller_name,
+        "am": amount_str,
+        "cu": "INR",
+        "tr": f"ORD_{order.id}",
+        "tn": f"Order_{order.id}_SocietyFood",
+    }
+    upi_uri = f"upi://pay?{urllib.parse.urlencode(query_params)}"
+
+    existing = db.query(Payment).filter(Payment.order_id == order_id).first()
+    if existing:
+        existing.amount = order.total_price
+        existing.provider = "direct_upi"
+        existing.status = PaymentStatus.created
+        payment = existing
+    else:
+        payment = Payment(
+            order_id=order.id,
+            buyer_id=order.buyer_id,
+            seller_id=order.seller_id,
+            amount=order.total_price,
+            currency="INR",
+            status=PaymentStatus.created,
+            provider="direct_upi",
+        )
+        db.add(payment)
+
+    db.commit()
+    db.refresh(payment)
+
+    return {
+        "order_id": order.id,
+        "amount": order.total_price,
+        "currency": "INR",
+        "seller_name": seller_name,
+        "seller_vpa": seller_vpa,
+        "upi_uri": upi_uri,
+        "payment_id": payment.id,
+    }
+
+
+def submit_buyer_payment(
+    db: Session, order_id: int, buyer_id: int, utr_number: str
+) -> Payment:
+    """
+    Record buyer's submitted 12-digit UPI UTR / Transaction Reference ID.
+    Transitions payment status to 'submitted'.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found."
+        )
+
+    if order.buyer_id != buyer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only submit payment details for your own orders.",
+        )
+
+    utr = utr_number.strip()
+    if not re.fullmatch(r"^[0-9A-Za-z]{6,35}$", utr):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid UPI reference / UTR number. Please enter the transaction ID from your UPI app.",
+        )
+
+    payment = db.query(Payment).filter(Payment.order_id == order_id).first()
+    if not payment:
+        payment = Payment(
+            order_id=order.id,
+            buyer_id=order.buyer_id,
+            seller_id=order.seller_id,
+            amount=order.total_price,
+            currency="INR",
+            status=PaymentStatus.submitted,
+            provider="direct_upi",
+            utr_number=utr,
+        )
+        db.add(payment)
+    else:
+        payment.utr_number = utr
+        payment.status = PaymentStatus.submitted
+
+    db.commit()
+    db.refresh(payment)
+    logger.info("Buyer submitted UTR for order %s: %s", order_id, utr)
+    return payment
+
+
+def confirm_seller_payment(
+    db: Session, order_id: int, seller_id: int
+) -> Payment:
+    """
+    Home chef confirms receipt of direct UPI credit in their bank account.
+    Marks payment captured, moves order to 'accepted', and updates SaaS pass quota/ledger.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order not found."
+        )
+
+    if order.seller_id != seller_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the designated home chef can confirm payment for this order.",
+        )
+
+    payment = db.query(Payment).filter(Payment.order_id == order_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment record not found for this order.",
+        )
+
+    if payment.status == PaymentStatus.captured:
+        return payment
+
+    now = datetime.now(UTC)
+    payment.status = PaymentStatus.captured
+    payment.captured_at = now
+    payment.seller_confirmed_at = now
+    order.status = OrderStatus.accepted
+    order.updated_at = now
+
+    # SaaS Pass & Maintenance Quota Logic
+    seller_profile = (
+        db.query(SellerProfile).filter(SellerProfile.id == seller_id).first()
+    )
+    if seller_profile:
+        seller_profile.lifetime_orders_count = (
+            seller_profile.lifetime_orders_count or 0
+        ) + 1
+
+        free_remaining = (
+            seller_profile.free_orders_remaining
+            if seller_profile.free_orders_remaining is not None
+            else settings.FREE_ORDERS_QUOTA
+        )
+
+        if free_remaining > 0:
+            seller_profile.free_orders_remaining = free_remaining - 1
+            logger.info(
+                "Order %s confirmed under free quota. Seller %s has %s free orders remaining.",
+                order.id,
+                seller_id,
+                seller_profile.free_orders_remaining,
+            )
+        else:
+            # Free quota exhausted: deduct flat maintenance fee (₹5)
+            fee = Decimal(str(settings.MAINTENANCE_FEE_PER_ORDER))
+            current_bal = (
+                seller_profile.maintenance_balance
+                if seller_profile.maintenance_balance is not None
+                else Decimal("0.00")
+            )
+            seller_profile.maintenance_balance = current_bal - fee
+
+            ledger_entry = LedgerEntry(
+                payment_id=payment.id,
+                user_id=seller_id,
+                order_id=order.id,
+                entry_type=LedgerEntryType.maintenance_fee,
+                amount=-fee,
+                balance_after=seller_profile.maintenance_balance,
+                description=f"Platform maintenance fee (₹{fee}) for Order #{order.id}",
+            )
+            db.add(ledger_entry)
+            logger.info(
+                "Deducted maintenance fee ₹%s for Order %s. New balance: ₹%s",
+                fee,
+                order.id,
+                seller_profile.maintenance_balance,
+            )
+
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def get_seller_maintenance_status(db: Session, seller_id: int) -> dict:
+    """Return SaaS Pass free quota, credit balance, and availability guard status."""
+    seller_profile = (
+        db.query(SellerProfile).filter(SellerProfile.id == seller_id).first()
+    )
+    if not seller_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Seller profile not found."
+        )
+
+    free_left = (
+        seller_profile.free_orders_remaining
+        if seller_profile.free_orders_remaining is not None
+        else settings.FREE_ORDERS_QUOTA
+    )
+    bal = (
+        seller_profile.maintenance_balance
+        if seller_profile.maintenance_balance is not None
+        else Decimal("0.00")
+    )
+    grace_threshold = Decimal(str(settings.MAINTENANCE_GRACE_LIMIT))
+    is_allowed = (free_left > 0) or (bal >= grace_threshold)
+
+    return {
+        "seller_id": seller_id,
+        "free_orders_remaining": free_left,
+        "free_orders_total": settings.FREE_ORDERS_QUOTA,
+        "maintenance_balance": bal,
+        "lifetime_orders_count": seller_profile.lifetime_orders_count or 0,
+        "maintenance_fee_per_order": settings.MAINTENANCE_FEE_PER_ORDER,
+        "platform_upi_vpa": settings.PLATFORM_UPI_VPA,
+        "platform_upi_name": settings.PLATFORM_UPI_NAME,
+        "is_availability_allowed": is_allowed,
+    }
+
+
+def topup_seller_maintenance(
+    db: Session, seller_id: int, amount: Decimal, utr_number: str
+) -> dict:
+    """Top up seller platform maintenance balance with submitted recharge UTR."""
+    seller_profile = (
+        db.query(SellerProfile).filter(SellerProfile.id == seller_id).first()
+    )
+    if not seller_profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Seller profile not found."
+        )
+
+    if amount <= Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Top-up amount must be greater than zero.",
+        )
+
+    utr = utr_number.strip()
+    if not re.fullmatch(r"^[0-9A-Za-z]{6,35}$", utr):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid recharge UPI reference / UTR number.",
+        )
+
+    current_bal = (
+        seller_profile.maintenance_balance
+        if seller_profile.maintenance_balance is not None
+        else Decimal("0.00")
+    )
+    seller_profile.maintenance_balance = current_bal + amount
+
+    entry = LedgerEntry(
+        payment_id=None,
+        user_id=seller_id,
+        order_id=None,
+        entry_type=LedgerEntryType.maintenance_recharge,
+        amount=amount,
+        balance_after=seller_profile.maintenance_balance,
+        description=f"Maintenance balance recharge of ₹{amount} (UTR: {utr})",
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(seller_profile)
+
+    return get_seller_maintenance_status(db, seller_id)
 

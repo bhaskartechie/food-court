@@ -33,6 +33,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { ordersAPI, getErrorMessage } from '../services/api';
+import DirectUPIPaymentModal from './DirectUPIPaymentModal';
 
 const SLOT_LABELS = {
   lunch_today: '☀️ Lunch Today (12:30 PM - 1:30 PM)',
@@ -55,6 +56,7 @@ export default function CartDrawer({
   const [chefConfig, setChefConfig] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [upiModalOrder, setUpiModalOrder] = useState(null);
 
   // Group cart items by sellerId
   const chefGroups = cartItems.reduce((acc, item) => {
@@ -143,9 +145,13 @@ export default function CartDrawer({
       }
 
       onClearCart();
-      onClose();
       if (onOrderSuccess) {
         onOrderSuccess(createdOrders.length === 1 ? createdOrders[0] : createdOrders);
+      }
+      if (createdOrders.length > 0) {
+        setUpiModalOrder(createdOrders[0]);
+      } else {
+        onClose();
       }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to place one or more orders. Please try again.'));
@@ -454,6 +460,27 @@ export default function CartDrawer({
             </Button>
           </Box>
 
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              bgcolor: 'rgba(76, 175, 80, 0.12)',
+              border: '1px solid rgba(76, 175, 80, 0.3)',
+              borderRadius: 1.5,
+              px: 1.5,
+              py: 0.75,
+              mb: 1.5,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+              Direct P2PM UPI
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#81c784' }}>
+              0% Aggregator Fee • Pay Chef Directly
+            </Typography>
+          </Box>
+
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
             <Typography variant="h6" fontWeight="bold">
               Grand Total
@@ -494,6 +521,23 @@ export default function CartDrawer({
           </Button>
 
         </Box>
+      )}
+
+      {upiModalOrder && (
+        <DirectUPIPaymentModal
+          open={Boolean(upiModalOrder)}
+          onClose={() => {
+            setUpiModalOrder(null);
+            onClose();
+          }}
+          orderId={upiModalOrder?.id}
+          orderAmount={upiModalOrder?.total_price}
+          sellerName={upiModalOrder?.seller_name}
+          onSuccess={() => {
+            setUpiModalOrder(null);
+            onClose();
+          }}
+        />
       )}
     </Drawer>
   );

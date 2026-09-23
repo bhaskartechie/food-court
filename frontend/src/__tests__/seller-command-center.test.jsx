@@ -47,6 +47,15 @@ jest.mock('../services/api', () => ({
   },
   paymentsAPI: {
     getBalance: () => Promise.resolve({ data: { current_balance: 1450.0, total_earned: 8900.0 } }),
+    getMaintenanceStatus: () => Promise.resolve({
+      data: {
+        free_orders_remaining: 48,
+        free_orders_total: 50,
+        maintenance_balance: 0.0,
+        is_availability_allowed: true,
+      },
+    }),
+    confirmReceived: () => Promise.resolve({ data: { status: 'captured' } }),
   },
   deliveryAPI: {
     updateStatus: () => Promise.resolve({ data: {} }),

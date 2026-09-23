@@ -50,6 +50,9 @@ class Menu(TimestampMixin, Base):
     # Optional image URL (CDN / S3)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Spice Level: "mild" | "medium" | "hot"
+    spice_level: Mapped[str | None] = mapped_column(String(50), default="medium", nullable=True)
+
     # ── Pre-Order Configuration ───────────────────────────────────────────────
     # Whether this item requires advance pre-ordering (vs instant ready meal)
     is_preorder_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -13,10 +13,11 @@ Authenticated (seller or admin):
   PATCH /api/v1/sellers/me/open          → toggle open/closed status
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db, require_role
+from app.core.config import settings
 from app.db.models import User
 from app.schemas.seller import SellerRegisterRequest, SellerUpdateRequest
 from app.services import order_service, seller_service
@@ -69,6 +70,10 @@ async def get_my_seller_profile(
         "bio": seller.bio,
         "photo_url": seller.photo_url,
         "upi_id": seller.upi_id,
+        "upi_account_name": getattr(seller, "upi_account_name", None),
+        "is_upi_verified": getattr(seller, "is_upi_verified", bool(seller.upi_id)),
+        "free_orders_remaining": getattr(seller, "free_orders_remaining", 50),
+        "maintenance_balance": float(getattr(seller, "maintenance_balance", 0.0)),
         "rating": seller.rating,
         "review_count": seller.review_count,
         "flat_number": user.flat_number,
@@ -119,6 +124,26 @@ async def toggle_open_status(
     Closed status does not affect existing orders or menu visibility.
     """
     seller, user = seller_service.get_seller_by_id(db, current_user.id)
+
+    # When opening the kitchen, ensure UPI is configured and maintenance quota is healthy
+    if not seller.is_open:
+        if not seller.upi_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please configure your UPI ID in Kitchen Settings / Profile before opening your kitchen for orders.",
+            )
+        free_left = (
+            seller.free_orders_remaining
+            if seller.free_orders_remaining is not None
+            else settings.FREE_ORDERS_QUOTA
+        )
+        bal = float(seller.maintenance_balance or 0.0)
+        if free_left <= 0 and bal < settings.MAINTENANCE_GRACE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Your free quota has expired and maintenance balance is below the grace limit. Please recharge credits to open your kitchen.",
+            )
+
     seller.is_open = not seller.is_open
     db.commit()
     db.refresh(seller)

@@ -111,7 +111,10 @@ def update_seller_profile(
     if request.photo_url is not None:
         seller.photo_url = request.photo_url
     if request.upi_id is not None:
-        seller.upi_id = request.upi_id
+        seller.upi_id = request.upi_id.strip() if request.upi_id else None
+        seller.is_upi_verified = bool(seller.upi_id)
+    if request.upi_account_name is not None:
+        seller.upi_account_name = request.upi_account_name.strip() if request.upi_account_name else None
 
     seller.updated_at = datetime.now(UTC)
     db.commit()

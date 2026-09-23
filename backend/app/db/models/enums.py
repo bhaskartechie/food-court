@@ -59,11 +59,12 @@ class ApprovalStatus(str, enum.Enum):
 
 
 class PaymentStatus(str, enum.Enum):
-    """Razorpay payment lifecycle states."""
+    """Payment lifecycle states (Direct P2PM UPI & Gateway)."""
 
-    created = "created"  # Razorpay order created; awaiting payment
-    captured = "captured"  # Payment captured successfully
-    failed = "failed"  # Payment failed
+    created = "created"  # Payment order / intent created; awaiting payment
+    submitted = "submitted"  # Buyer completed payment and submitted UTR; awaiting seller confirmation
+    captured = "captured"  # Payment captured / confirmed successfully
+    failed = "failed"  # Payment failed / rejected
     refunded = "refunded"  # Full refund processed
 
 
@@ -73,6 +74,8 @@ class LedgerEntryType(str, enum.Enum):
     credit = "credit"  # Sale revenue credited to seller
     debit = "debit"  # Deduction (e.g., reversal)
     platform_fee = "platform_fee"  # Platform commission deducted
+    maintenance_fee = "maintenance_fee"  # Flat SaaS maintenance fee deducted per order (e.g. ₹5)
+    maintenance_recharge = "maintenance_recharge"  # Platform maintenance credit top-up
     refund = "refund"  # Refund deducted from seller balance
 
 

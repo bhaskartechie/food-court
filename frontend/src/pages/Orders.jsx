@@ -19,6 +19,7 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import StarOutlineIcon from '@mui/icons-material/StarOutline';
 import { ordersAPI, getErrorMessage } from '../services/api';
 import RatingForm from '../components/RatingForm';
+import DirectUPIPaymentModal from '../components/DirectUPIPaymentModal';
 
 const SLOT_LABELS = {
   lunch_today: '☀️ Lunch Today',
@@ -33,6 +34,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [ratingOrderId, setRatingOrderId] = useState(null);
+  const [payOrderId, setPayOrderId] = useState(null);
 
   const fetchOrders = () => {
     setLoading(true);
@@ -147,6 +149,22 @@ export default function OrdersPage() {
                       Total: ₹{o.total_price || o.total || 0}
                     </Typography>
 
+                    {o.status === 'pending' && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => setPayOrderId(o.id)}
+                        sx={{
+                          bgcolor: '#E05A2B',
+                          '&:hover': { bgcolor: '#c84e24' },
+                          textTransform: 'none',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        Pay via UPI
+                      </Button>
+                    )}
+
                     {o.status === 'completed' && (
                       <Button
                         size="small"
@@ -175,6 +193,19 @@ export default function OrdersPage() {
             fetchOrders();
           }}
           onCancel={() => setRatingOrderId(null)}
+        />
+      )}
+
+      {/* Direct UPI Payment Dialog */}
+      {payOrderId && (
+        <DirectUPIPaymentModal
+          open={Boolean(payOrderId)}
+          onClose={() => setPayOrderId(null)}
+          orderId={payOrderId}
+          onSuccess={() => {
+            setPayOrderId(null);
+            fetchOrders();
+          }}
         />
       )}
     </Container>

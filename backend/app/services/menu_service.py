@@ -69,6 +69,7 @@ def get_seller_menus(
                 "available_slots": item.available_slots or [],
                 "max_batch_quantity": item.max_batch_quantity,
                 "min_lead_time_hours": item.min_lead_time_hours,
+                "spice_level": item.spice_level or "medium",
             }
             for item in items
         ],
@@ -103,6 +104,7 @@ def create_menu_item(
         max_batch_quantity=request.max_batch_quantity,
         min_lead_time_hours=request.min_lead_time_hours,
         image_url=request.image_url,
+        spice_level=request.spice_level or "medium",
     )
     db.add(item)
     db.commit()
@@ -159,6 +161,8 @@ def update_menu_item(
         item.min_lead_time_hours = request.min_lead_time_hours
     if request.image_url is not None:
         item.image_url = request.image_url
+    if request.spice_level is not None:
+        item.spice_level = request.spice_level
 
     item.updated_at = datetime.now(UTC)
     db.commit()

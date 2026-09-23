@@ -33,11 +33,12 @@ class Settings(BaseSettings):
     # ── Password Hashing ───────────────────────────────────────────────────────
     PASSWORD_HASH_ROUNDS: int = 12
 
-    # ── OTP (reserved for future email / phone OTP flow) ──────────────────────
-    # These settings are retained so future OTP wiring requires no config change.
-    OTP_EXPIRY_MINUTES: int = 10
+    # ── OTP Authentication & Rate Limiting ────────────────────────────────────
+    OTP_EXPIRY_MINUTES: int = 5
     OTP_MAX_ATTEMPTS: int = 5
     OTP_LENGTH: int = 6
+    OTP_RATE_LIMIT_REQUESTS: int = 3
+    OTP_RATE_LIMIT_WINDOW_MINUTES: int = 15
 
     # ── Email (SMTP) ───────────────────────────────────────────────────────────
     SMTP_SERVER: str = "smtp.gmail.com"
@@ -58,7 +59,14 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080"
 
-    # ── Razorpay Payment Gateway ───────────────────────────────────────────────
+    # ── Direct P2PM UPI & SaaS Pass Maintenance ───────────────────────────────
+    PLATFORM_UPI_VPA: str = "societyfood@upi"
+    PLATFORM_UPI_NAME: str = "Society Food Platform"
+    FREE_ORDERS_QUOTA: int = 50
+    MAINTENANCE_FEE_PER_ORDER: float = 5.0
+    MAINTENANCE_GRACE_LIMIT: float = -25.0  # Allows up to 5 orders in grace before disabling availability
+
+    # ── Razorpay Payment Gateway (Legacy / Fallback) ───────────────────────────
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
     RAZORPAY_WEBHOOK_SECRET: str = ""

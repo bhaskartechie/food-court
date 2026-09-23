@@ -32,9 +32,9 @@ class LedgerEntry(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
-    # Payment that triggered this ledger entry
-    payment_id: Mapped[int] = mapped_column(
-        ForeignKey("payments.id"), index=True, nullable=False
+    # Payment that triggered this ledger entry (nullable for direct platform adjustments / top-ups)
+    payment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("payments.id"), index=True, nullable=True
     )
 
     # The user (seller) whose balance this entry affects
@@ -42,9 +42,9 @@ class LedgerEntry(TimestampMixin, Base):
         ForeignKey("users.id"), index=True, nullable=False
     )
 
-    # The related order
-    order_id: Mapped[int] = mapped_column(
-        ForeignKey("orders.id"), index=True, nullable=False
+    # The related order (nullable for general maintenance top-ups)
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id"), index=True, nullable=True
     )
 
     # Type of accounting entry

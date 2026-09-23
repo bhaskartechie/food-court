@@ -11,7 +11,7 @@ so they never delay the HTTP response.
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db, require_role
@@ -90,8 +90,13 @@ async def get_order(
     current_user: User = GET_USER_DEPENDENCY,
     db: Session = DB_DEPENDENCY,
 ):
-    """Get details of a specific order."""
+    """Get details of a specific order (BOLA protected)."""
     order = order_service.get_order_by_id(db, order_id)
+    if current_user.role != "admin" and order.buyer_id != current_user.id and order.seller_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view this order.",
+        )
     return OrderResponse.model_validate(order)
 
 

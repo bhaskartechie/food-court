@@ -21,6 +21,7 @@ def test_create_preorder_menu_and_place_preorder(client: TestClient, db: Session
     seller_prof = SellerProfile(
         id=seller_user.id,
         bio="North Indian Specials",
+        upi_id="chefsharma@okaxis",
         approval_status=ApprovalStatus.approved,
     )
     db.add(seller_prof)

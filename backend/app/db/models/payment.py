@@ -54,12 +54,12 @@ class Payment(TimestampMixin, Base):
         default=PaymentStatus.created,
     )
 
-    # Payment gateway identifier
+    # Payment gateway / rail identifier (direct_upi, razorpay)
     provider: Mapped[str] = mapped_column(
-        String(50), default="razorpay", nullable=False
+        String(50), default="direct_upi", nullable=False
     )
 
-    # Razorpay identifiers (populated progressively through the flow)
+    # Identifiers (populated progressively through the flow)
     provider_order_id: Mapped[str | None] = mapped_column(
         String(100), nullable=True, index=True
     )
@@ -68,10 +68,18 @@ class Payment(TimestampMixin, Base):
     )
     provider_signature: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Direct P2PM UPI identifiers
+    utr_number: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, index=True
+    )
+    seller_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Human-readable failure reason (populated on failed / refunded)
     failure_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    # Timestamp when payment was successfully captured
+    # Timestamp when payment was successfully captured / confirmed
     captured_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

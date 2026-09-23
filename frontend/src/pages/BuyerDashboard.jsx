@@ -16,6 +16,7 @@ import {
   Divider,
   TextField,
   InputAdornment,
+  Avatar,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
@@ -33,6 +34,13 @@ const STATUS_TO_STEP = {
   accepted: 1,
   ready: 2,
   completed: 3,
+};
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 };
 
 export default function BuyerDashboardPage({ currentUser }) {
@@ -71,7 +79,7 @@ export default function BuyerDashboardPage({ currentUser }) {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4, color: '#fff' }}>
-      {/* Welcome Banner */}
+      {/* Welcome Banner (Coffee/Modern Food App Inspiration) */}
       <Box
         sx={{
           bgcolor: 'linear-gradient(135deg, #1F1F35 0%, #161622 100%)',
@@ -86,13 +94,36 @@ export default function BuyerDashboardPage({ currentUser }) {
           gap: 2,
         }}
       >
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Welcome back, {currentUser?.name || 'Neighbor'}! 👋
-          </Typography>
-          <Typography variant="body1" color="text.secondary" mt={0.5}>
-            Fresh, authentic home-cooked meals from passionate chefs in your society.
-          </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Avatar
+            sx={{
+              bgcolor: '#1B4332',
+              color: '#fff',
+              width: 54,
+              height: 54,
+              fontSize: '1.4rem',
+              fontWeight: 'bold',
+              border: '2px solid rgba(46, 196, 182, 0.4)',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+            }}
+          >
+            {(currentUser?.name || 'N').charAt(0).toUpperCase()}
+          </Avatar>
+          <Box>
+            <Typography variant="h4" fontWeight="bold">
+              {getGreeting()}, {currentUser?.name || 'Neighbor'}! 👋
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1} mt={0.5} flexWrap="wrap">
+              <Chip
+                size="small"
+                label={currentUser?.flat_number ? `📍 Flat #${currentUser.flat_number} • Resident` : '📍 Resident'}
+                sx={{ bgcolor: 'rgba(255,255,255,0.08)', color: '#F6BD60', fontWeight: 'bold', fontSize: 12 }}
+              />
+              <Typography variant="body2" color="text.secondary">
+                Fresh home-cooked meals from passionate chefs in your society.
+              </Typography>
+            </Box>
+          </Box>
         </Box>
 
         <Box display="flex" gap={1.5}>
@@ -162,6 +193,42 @@ export default function BuyerDashboardPage({ currentUser }) {
             },
           }}
         />
+
+        {/* Category Pills (Coffee App Inspired Filter Bar) */}
+        <Box display="flex" gap={1} overflow="auto" sx={{ mt: 2, pb: 0.5, '::-webkit-scrollbar': { display: 'none' } }}>
+          {[
+            { id: 'all', label: 'All Specialties' },
+            { id: 'veg', label: 'Veg 🟢' },
+            { id: 'non_veg', label: 'Non-Veg 🔴' },
+            { id: 'snacks', label: 'Snacks 🥪' },
+            { id: 'desserts', label: 'Desserts 🍰' },
+            { id: 'beverages', label: 'Beverages ☕' },
+          ].map((cat) => (
+            <Chip
+              key={cat.id}
+              label={cat.label}
+              clickable
+              onClick={() => {
+                navigate(cat.id === 'all' ? '/sellers' : `/sellers?category=${cat.id}`);
+              }}
+              sx={{
+                px: 1.5,
+                py: 2.2,
+                borderRadius: '999px',
+                fontWeight: 'bold',
+                fontSize: '0.88rem',
+                bgcolor: '#191928',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.1)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: '#1B4332',
+                  borderColor: '#2EC4B6',
+                },
+              }}
+            />
+          ))}
+        </Box>
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
